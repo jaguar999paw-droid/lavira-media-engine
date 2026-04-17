@@ -15,16 +15,10 @@ bash start.sh
 ### URLs
 
 - **Web UI**: `http://localhost:4005`
-- **MCP (HTTP/SSE)**: `http://localhost:4006` (started by `start.sh`)
-
-### Key docs
-
-- `LAVIRA_MCP_HANDOFF.md`
-- `AGENT_HANDOFF.md`
-- `HANDOFFFFFF.md`
+- **MCP (HTTP/SSE)**: `http://localhost:4006` (started by `start.sh`
 
 ### Notes
 
 - Never commit `.env`, `node_modules/`, `uploads/`, or `outputs/`.
-- Outputs are written to `outputs/` and are downloadable under `/outputs/<filename>`.
+- Post Outputs are written to `outputs/` and are downloadable under `/outputs/<filename>`.
 
