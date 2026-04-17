@@ -1,0 +1,8 @@
+node_modules
+uploads/
+outputs/
+lavira.db
+.env
+*.log
+.git
+AGENT_HANDOFF.md

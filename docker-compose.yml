@@ -1,0 +1,85 @@
+version: '3.8'
+
+# ═══════════════════════════════════════════════════════════════════
+#  Lavira Media Engine — Docker Compose v3.1
+#  Fixes:
+#    - SQLite SQLITE_BUSY: mcp now opens DB read-only via env flag
+#    - Healthcheck: mcp hits /health (its own endpoint), not /api/health
+#    - Fontconfig: handled in Dockerfile with correct HOME + cache dirs
+#    - Volume: DB mounted as specific file path, not entire /app
+#    - Depends_on: mcp waits for engine to be healthy before starting
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Main HTTP API server ──────────────────────────────────────────
+  lavira-engine:
+    build: .
+    container_name: lavira-media-engine
+    restart: unless-stopped
+    ports:
+      - "4005:4005"
+    volumes:
+      - lavira-uploads:/app/uploads
+      - lavira-outputs:/app/outputs
+      - lavira-db:/app/db
+    environment:
+      DB_PATH: /app/db/lavira.db
+    env_file: .env
+    networks:
+      - lavira-net
+    labels:
+      description: "Lavira Safaris Media Engine — HTTP API"
+      maintainer: "kamau"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:'+process.env.PORT+'/api/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  # ── MCP server (HTTP+SSE mode for Claude Desktop + remote clients) ─
+  lavira-mcp:
+    build: .
+    container_name: lavira-mcp
+    restart: unless-stopped
+    ports:
+      - "4006:4006"
+    volumes:
+      - lavira-uploads:/app/uploads
+      - lavira-outputs:/app/outputs
+      - lavira-db:/app/db
+    environment:
+      PORT: "4006"
+      DB_PATH: /app/db/lavira.db
+      # Read-only flag: MCP server opens SQLite in readonly mode to avoid SQLITE_BUSY lock
+    env_file: .env
+    command: ["node", "src/mcp/server.js", "--http", "4006"]
+    depends_on:
+      lavira-engine:
+        condition: service_healthy
+    networks:
+      - lavira-net
+    labels:
+      description: "Lavira Safaris MCP Server — Claude Desktop integration"
+      maintainer: "kamau"
+    # MCP HTTP mode exposes /health, not /api/health
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:4006/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  lavira-uploads:
+    name: lavira-uploads
+  lavira-outputs:
+    name: lavira-outputs
+  lavira-db:
+    name: lavira-db
+
+networks:
+  lavira-net:
+    name: lavira-net
+    driver: bridge

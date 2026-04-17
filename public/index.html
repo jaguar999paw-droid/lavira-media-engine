@@ -1,0 +1,2317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Lavira — Safari Media Engine</title>
+<style>
+:root{
+  --green:#2D6A4F;--green-light:#40916C;--green-dark:#1B4332;
+  --amber:#F4A261;--amber-light:#FBBF77;--amber-dark:#E07D3C;
+  --accent:#D4A574;--accent-light:#E8C49B;--accent-dark:#B8864B;
+  --cream:#FEF9EF;--dark:#0A1612;--dark2:#111F18;--dark3:#162B1E;
+  --card:#1A3326;--border:#2D6A4F30;
+  --grad1:linear-gradient(135deg,#0A1612 0%,#1B4332 50%,#0A1612 100%);
+  --grad-amber:linear-gradient(135deg,#F4A261,#E07D3C);
+  --grad-accent:linear-gradient(135deg,#D4A574,#B8864B);
+  --grad-green:linear-gradient(135deg,#2D6A4F,#1B4332);
+  --grad-hero:linear-gradient(160deg,#0A1612 0%,#1B4332 40%,#2D6A4F 70%,#F4A261 130%);
+  --shadow:0 8px 32px #00000055;
+  --glow:0 0 40px #2D6A4F33;
+  --glow-accent:0 0 40px #D4A57433;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--dark);color:#d8edd8;min-height:100vh;overflow-x:hidden}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--dark2)}
+::-webkit-scrollbar-thumb{background:#2D6A4F;border-radius:3px}
+
+/* ── HERO HEADER ── */
+.hero{
+  background:var(--grad-hero);
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232D6A4F' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  opacity:0.6;
+}
+.hero-particles{position:absolute;inset:0;pointer-events:none}
+.particle{position:absolute;border-radius:50%;animation:float linear infinite;opacity:0}
+@keyframes float{0%{transform:translateY(100vh) scale(0);opacity:0}10%{opacity:.7}90%{opacity:.3}100%{transform:translateY(-20vh) scale(1.5);opacity:0}}
+
+/* ── NAV ── */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:1000;
+  display:flex;align-items:center;gap:12px;padding:14px 28px;
+  background:linear-gradient(180deg,#0A161299 0%,transparent 100%);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid #2D6A4F22;
+  transition:background .3s;
+}
+.nav.scrolled{background:#0A1612ee}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.nav-logo-mark{
+  width:38px;height:38px;border-radius:50%;
+  background:var(--grad-amber);
+  display:grid;place-items:center;
+  font-weight:900;font-size:16px;color:var(--dark);
+  box-shadow:0 0 20px #F4A26155;
+  flex-shrink:0;
+}
+.nav-name{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px}
+.nav-name span{color:var(--amber)}
+.nav-status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12px;color:#9fd3aa}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#52c78a;box-shadow:0 0 8px #52c78a;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.nav-links{display:flex;gap:4px;margin-left:24px}
+.nav-link{color:#9fd3aa;text-decoration:none;font-size:13px;font-weight:500;padding:6px 12px;border-radius:99px;transition:.15s}
+.nav-link:hover{background:#2D6A4F22;color:#fff}
+
+/* ── HERO CONTENT ── */
+.hero-body{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:120px 24px 80px;position:relative;z-index:1;
+}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  background:#2D6A4F33;border:1px solid #2D6A4F66;
+  border-radius:99px;padding:6px 16px;
+  font-size:12px;color:var(--amber-light);font-weight:600;
+  margin-bottom:28px;letter-spacing:.5px;text-transform:uppercase;
+}
+.hero-title{
+  font-size:clamp(48px,8vw,96px);
+  font-weight:900;
+  line-height:.95;
+  letter-spacing:-3px;
+  margin-bottom:10px;
+}
+.hero-title .line1{
+  background:linear-gradient(135deg,#fff 0%,#c5e8cc 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:block;
+}
+.hero-title .line2{
+  background:var(--grad-amber);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  display:block;
+}
+.hero-sub{
+  font-size:clamp(16px,2.5vw,22px);color:#9fd3aa;
+  max-width:580px;line-height:1.6;margin:24px auto 0;
+}
+.hero-cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:40px}
+.btn-hero{
+  padding:14px 32px;border-radius:99px;font-size:15px;font-weight:700;
+  cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px;
+  transition:.2s;border:none;letter-spacing:.2px;
+}
+.btn-hero-primary{background:var(--grad-amber);color:var(--dark);box-shadow:0 8px 24px #F4A26144}
+.btn-hero-primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px #F4A26166}
+.btn-hero-secondary{background:transparent;color:#c5e8cc;border:1px solid #2D6A4F88}
+.btn-hero-secondary:hover{background:#2D6A4F22;transform:translateY(-2px)}
+
+/* ── STATS ROW ── */
+.stats-row{
+  display:flex;gap:1px;background:#2D6A4F22;
+  border-top:1px solid #2D6A4F33;
+  border-bottom:1px solid #2D6A4F33;
+  position:relative;z-index:1;
+}
+.stat{
+  flex:1;padding:24px 16px;text-align:center;
+  background:linear-gradient(180deg,#162B1E 0%,#0A1612 100%);
+}
+.stat-num{font-size:32px;font-weight:900;color:var(--amber);line-height:1}
+.stat-lbl{font-size:11px;color:#6a9470;margin-top:4px;text-transform:uppercase;letter-spacing:.6px}
+
+/* ── APP SECTION ── */
+.app-section{background:var(--dark2);position:relative}
+.app-section::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,#2D6A4F,#F4A261,#2D6A4F,transparent);
+}
+
+/* ── SECTION CHROME ── */
+.section-header{text-align:center;padding:60px 24px 32px;position:relative;z-index:1}
+.section-badge{
+  display:inline-block;background:#2D6A4F22;border:1px solid #2D6A4F55;
+  border-radius:99px;padding:5px 14px;font-size:11px;color:var(--amber-light);
+  font-weight:700;letter-spacing:.7px;text-transform:uppercase;margin-bottom:16px;
+}
+.section-title{font-size:clamp(28px,4vw,42px);font-weight:800;color:#fff;line-height:1.1;margin-bottom:10px}
+.section-desc{font-size:15px;color:#6a9470;max-width:480px;margin:0 auto;line-height:1.6}
+
+/* ── TABS ── */
+.tabs{
+  display:flex;justify-content:center;gap:6px;
+  padding:0 24px 24px;flex-wrap:wrap;position:relative;z-index:1;
+}
+.tab{
+  padding:10px 22px;border-radius:99px;font-size:13px;font-weight:700;
+  cursor:pointer;transition:.2s;border:1px solid #2D6A4F44;
+  background:transparent;color:#6a9470;white-space:nowrap;
+}
+.tab:hover{border-color:#2D6A4F;color:#9fd3aa;background:#2D6A4F15}
+.tab.active{background:var(--grad-amber);color:var(--dark);border-color:transparent;box-shadow:0 4px 16px #F4A26133}
+
+/* ── PANELS ── */
+.panel{display:none}.panel.active{display:block}
+.wrap{max-width:860px;margin:0 auto;padding:0 18px 60px}
+
+/* ── CARDS ── */
+.card{
+  background:linear-gradient(160deg,#1E3828 0%,#162B1E 100%);
+  border:1px solid #2D6A4F33;border-radius:18px;
+  padding:26px;margin-bottom:20px;
+  box-shadow:var(--shadow);position:relative;overflow:hidden;
+}
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,#2D6A4F88,transparent);
+}
+.card-icon{font-size:32px;margin-bottom:12px;display:block}
+.card-title{font-size:16px;font-weight:700;color:#c5e8cc;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card-desc{font-size:12px;color:#4d7a55;margin-bottom:18px;line-height:1.6}
+
+/* ── SMART DEST CHIP ── */
+.dest-chip{
+  display:inline-flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,#1B3326,#2D6A4F22);
+  border:1px solid #2D6A4F66;border-radius:99px;
+  padding:7px 16px;font-size:13px;color:#9fd3aa;margin-bottom:18px;
+}
+.dest-chip-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.dest-chip strong{color:var(--amber-light)}
+
+/* ── DROP ZONE ── */
+.dz{
+  border:2px dashed #2D6A4F66;border-radius:14px;
+  padding:44px 20px;text-align:center;cursor:pointer;
+  transition:.3s cubic-bezier(0.4, 0, 0.2, 1);position:relative;overflow:hidden;
+  background:linear-gradient(160deg,#0A161244,#1B432222);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,0.1);
+}
+.dz::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,transparent,var(--accent)08,transparent);
+  opacity:0;transition:.3s;
+}
+.dz:hover,.dz.over{
+  border-color:var(--accent);
+  background:linear-gradient(160deg,var(--accent)08,#2D6A4F15);
+  box-shadow:0 0 30px var(--glow-accent), inset 0 1px 3px rgba(0,0,0,0.1);
+  transform:translateY(-2px);
+}
+.dz:hover::before,.dz.over::before{opacity:1}
+.dz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{
+  font-size:52px;margin-bottom:12px;display:block;
+  filter:drop-shadow(0 4px 8px var(--glow-accent));
+  transition:.3s;
+}
+.dz:hover .dz-icon{transform:scale(1.1)}
+.dz-h{
+  font-size:16px;font-weight:700;color:#c5e8cc;margin-bottom:6px;
+  transition:.3s;
+}
+.dz:hover .dz-h{color:var(--accent-light)}
+.dz-p{
+  font-size:12px;color:#4d7a55;
+  transition:.3s;
+}
+.dz:hover .dz-p{color:#6a9470}
+.finfo{
+  background:#0b181088;border:1px solid #2D6A4F33;
+  border-radius:8px;padding:10px 14px;margin-top:12px;
+  font-size:12px;color:#9fd3aa;display:none;
+}
+
+/* ── PLATFORM GRID ── */
+.plats{display:grid;grid-template-columns:repeat(auto-fill,minmax(142px,1fr));gap:8px;margin-bottom:20px}
+.plt{
+  background:#0b181088;border:1px solid #2D6A4F33;
+  border-radius:10px;padding:12px;cursor:pointer;transition:.15s;
+  position:relative;overflow:hidden;
+}
+.plt::before{content:'';position:absolute;inset:0;background:var(--grad-amber);opacity:0;transition:.15s}
+.plt:hover{border-color:#2D6A4F;transform:translateY(-1px)}
+.plt.on{border-color:var(--amber);background:#F4A26112}
+.plt.on::before{opacity:.05}
+.plt-name{font-size:12px;font-weight:700;color:#c5e8cc;position:relative;display:flex;align-items:center;gap:5px}
+.plt-res{font-size:10px;color:#4d7a55;margin-top:3px;position:relative}
+.chk{margin-left:auto;color:var(--amber);font-size:14px;display:none}
+.plt.on .chk{display:inline}
+
+/* ── CONTROLS ── */
+.sec-lbl{font-size:10px;font-weight:700;color:#4d7a55;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.ctrls{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.ctrl label{display:block;font-size:10px;color:#4d7a55;margin-bottom:5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.ctrl input,.ctrl select,.ctrl textarea{
+  width:100%;background:#0b1810;
+  border:1px solid #2D6A4F33;border-radius:8px;
+  padding:9px 12px;color:#c5e8cc;font-size:13px;outline:none;
+  transition:.15s;font-family:inherit;
+}
+.ctrl input:focus,.ctrl select:focus,.ctrl textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--glow-accent);
+  background:linear-gradient(135deg,#0b1810,var(--accent)05);
+}
+.ctrl.error input,.ctrl.error select,.ctrl.error textarea{
+  border-color:#f08080;background:#3a1a1a22;
+}
+.ctrl.error label::after{
+  content:' ⚠️';color:#f08080;
+}
+.ctrl select option{background:#0A1612}
+.ctrl textarea{resize:vertical;min-height:56px}
+
+/* ── BUTTONS ── */
+.btn{border:none;border-radius:10px;font-size:14px;font-weight:700;padding:13px 28px;cursor:pointer;width:100%;transition:.25s cubic-bezier(0.4, 0, 0.2, 1);letter-spacing:.2px;display:flex;align-items:center;justify-content:center;gap:8px;position:relative;overflow:hidden}
+.btn::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent,rgba(255,255,255,0.1),transparent);opacity:0;transition:.25s}
+.btn:hover:not(:disabled)::before{opacity:1}
+.btn-go{background:var(--grad-accent);color:var(--dark);box-shadow:0 4px 20px var(--glow-accent)}
+.btn-go:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px var(--glow-accent)}
+.btn-go:active:not(:disabled){transform:translateY(0);box-shadow:0 2px 10px var(--glow-accent)}
+.btn-go:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:0 2px 10px rgba(0,0,0,0.2)}
+.btn-sm{width:auto;padding:8px 18px;font-size:12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
+.btn-outline{background:transparent;border:1px solid #2D6A4F55;color:#9fd3aa;box-shadow:none}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent-light);background:var(--accent)08}
+.btn-approve{background:linear-gradient(135deg,#2D6A4F,#1B4332);color:#c5e8cc}
+.btn-reject{background:#3a1a1a44;border:1px solid #8B0000;color:#f08080}
+
+/* ── PROGRESS ── */
+.prog{display:none;margin-top:18px}
+.prog-track{background:#0b1810;border-radius:99px;height:8px;overflow:hidden;margin-bottom:8px;box-shadow:inset 0 1px 3px #00000055;position:relative}
+.prog-track::before{content:'';position:absolute;inset:0;border-radius:99px;background:linear-gradient(90deg,transparent,var(--accent)15,transparent)}
+.prog-bar{background:linear-gradient(90deg,var(--green),var(--accent),var(--amber));height:8px;border-radius:99px;transition:width .8s cubic-bezier(0.4, 0, 0.2, 1);width:0;box-shadow:0 0 15px var(--glow-accent);position:relative}
+.prog-bar::after{content:'';position:absolute;right:0;top:0;bottom:0;width:20px;background:linear-gradient(90deg,transparent,#fff4);border-radius:0 99px 99px 0;animation:shine 2s infinite}
+@keyframes shine{0%,100%{opacity:0}50%{opacity:1}}
+.prog-msg{font-size:11px;color:#4d7a55;text-align:center}
+
+/* ── GIF GRID ── */
+.gif-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px;margin-top:12px}
+.gif-item{border:2px solid transparent;border-radius:10px;overflow:hidden;cursor:pointer;transition:.15s;position:relative}
+.gif-item:hover{border-color:#2D6A4F;transform:scale(1.02)}
+.gif-item.selected{border-color:var(--amber);box-shadow:0 0 20px #F4A26133}
+.gif-item img{width:100%;height:115px;object-fit:cover;display:block}
+.gif-label{font-size:10px;color:#6a9470;padding:4px 7px;background:#0A1612;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── JOB CARD ── */
+.job-card{
+  background:linear-gradient(160deg,#1E3828,#0A1612);
+  border:1px solid #2D6A4F33;border-radius:12px;
+  padding:18px;margin-bottom:14px;transition:.2s;
+}
+.job-card:hover{border-color:#2D6A4F55;box-shadow:var(--glow)}
+.job-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700}
+.badge-processing{background:#2D6A4F22;color:#52c78a;border:1px solid #2D6A4F55}
+.badge-done{background:#1a3a2a;color:#52c78a;border:1px solid #2D6A4F}
+.badge-error{background:#3a1a1a;color:#f08080;border:1px solid #8B0000}
+.promo-preview{
+  background:#0b181088;border:1px solid #2D6A4F22;
+  border-radius:8px;padding:14px;margin-top:12px;
+  white-space:pre-line;font-size:12px;color:#9fd3aa;line-height:1.7;
+  max-height:140px;overflow:auto;
+}
+
+/* ── OUTPUT ── */
+.res-item{
+  background:#0b181088;border:1px solid #2D6A4F22;
+  border-radius:10px;padding:14px 18px;margin-bottom:10px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  transition:.15s;
+}
+.res-item:hover{border-color:#2D6A4F55;transform:translateX(2px)}
+.res-label{font-size:13px;font-weight:700;color:#9fd3aa}
+.res-meta{font-size:10px;color:#4d7a55;margin-top:3px}
+.dl{
+  background:var(--grad-amber);color:var(--dark);
+  border:none;border-radius:7px;padding:7px 16px;
+  font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;
+  white-space:nowrap;display:inline-block;
+  box-shadow:0 2px 10px #F4A26133;transition:.15s;
+}
+.dl:hover{transform:translateY(-1px);box-shadow:0 4px 16px #F4A26144}
+.caption-edit{
+  width:100%;background:#0b1810;border:1px solid #2D6A4F33;
+  border-radius:10px;padding:16px;color:#9fd3aa;font-size:13px;
+  line-height:1.75;resize:vertical;min-height:120px;outline:none;font-family:inherit;
+}
+.action-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+
+/* ── HISTORY ── */
+.hist-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid #2D6A4F18;font-size:12px;color:#9fd3aa;
+}
+.hist-item:last-child{border:none}
+.badge-sm{background:#2D6A4F22;color:#9fd3aa;border-radius:5px;padding:2px 7px;font-size:10px;margin-left:5px}
+
+/* ── USAGE SECTION ── */
+.usage-section{
+  background:linear-gradient(160deg,#0A1612 0%,#162B1E 50%,#0A1612 100%);
+  padding:80px 24px;
+  position:relative;overflow:hidden;
+}
+.usage-section::before{
+  content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;
+  background:radial-gradient(ellipse at 60% 40%,#2D6A4F15 0%,transparent 60%);
+  pointer-events:none;
+}
+.usage-grid{max-width:920px;margin:48px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.usage-card{
+  background:linear-gradient(160deg,#1E3828,#0A1612);
+  border:1px solid #2D6A4F33;border-radius:16px;padding:24px;
+  position:relative;overflow:hidden;transition:.2s;
+}
+.usage-card:hover{border-color:#2D6A4F88;transform:translateY(-3px);box-shadow:var(--glow)}
+.usage-card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--grad-amber);opacity:.6;
+}
+.usage-step{
+  width:36px;height:36px;border-radius:10px;
+  background:var(--grad-amber);
+  display:grid;place-items:center;
+  font-weight:900;font-size:16px;color:var(--dark);
+  margin-bottom:14px;box-shadow:0 4px 12px #F4A26133;
+}
+.usage-title{font-size:16px;font-weight:700;color:#c5e8cc;margin-bottom:8px}
+.usage-desc{font-size:13px;color:#4d7a55;line-height:1.65}
+.usage-tag{
+  display:inline-block;background:#2D6A4F22;border:1px solid #2D6A4F44;
+  border-radius:5px;padding:2px 8px;font-size:10px;color:var(--amber-light);
+  font-weight:600;margin-top:12px;
+}
+
+/* ── FEATURES STRIP ── */
+.features-strip{
+  background:var(--dark);
+  border-top:1px solid #2D6A4F22;border-bottom:1px solid #2D6A4F22;
+  padding:48px 24px;
+}
+.features-grid{max-width:920px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.feature-item{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:16px;border-radius:10px;transition:.15s;
+}
+.feature-item:hover{background:#2D6A4F10}
+.feature-icon{font-size:24px;flex-shrink:0;margin-top:2px}
+.feature-title{font-size:13px;font-weight:700;color:#c5e8cc;margin-bottom:3px}
+.feature-desc{font-size:11px;color:#4d7a55;line-height:1.5}
+
+/* ── FUNNEL BANNER ── */
+.funnel-banner{
+  background:linear-gradient(135deg,#1B4332,#2D6A4F44);
+  border:1px solid #2D6A4F66;border-radius:14px;
+  padding:20px 24px;margin-bottom:20px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.funnel-icon{font-size:28px;flex-shrink:0}
+.funnel-url{
+  font-size:13px;font-weight:700;color:var(--amber-light);
+  word-break:break-all;
+  background:#0b181055;border-radius:6px;padding:6px 10px;
+  border:1px solid #2D6A4F44;flex:1;
+}
+.copy-url-btn{
+  background:var(--grad-amber);border:none;border-radius:7px;
+  padding:7px 14px;font-size:12px;font-weight:700;
+  color:var(--dark);cursor:pointer;white-space:nowrap;flex-shrink:0;
+}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:22px;right:22px;
+  background:linear-gradient(135deg,#1B4332,#2D6A4F);
+  color:#c5e8cc;padding:12px 20px;border-radius:10px;
+  font-size:13px;opacity:0;transition:opacity .25s;
+  pointer-events:none;z-index:9999;
+  border:1px solid #2D6A4F88;
+  box-shadow:0 8px 24px #00000055;
+  max-width:320px;
+}
+.toast.show{opacity:1}
+
+/* ── FOOTER ── */
+.footer{
+  background:var(--dark);border-top:1px solid #2D6A4F22;
+  padding:40px 24px;text-align:center;
+}
+.footer-logo{font-size:28px;font-weight:900;margin-bottom:8px}
+.footer-logo span{color:var(--amber)}
+.footer-sub{font-size:12px;color:#4d7a55;line-height:1.6}
+.footer-links{display:flex;justify-content:center;gap:20px;margin-top:16px;flex-wrap:wrap}
+.footer-link{color:#4d7a55;text-decoration:none;font-size:12px;transition:.15s}
+.footer-link:hover{color:var(--amber-light)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:48px 20px;color:#2D6A4F66;font-size:13px}
+.empty-icon{font-size:40px;margin-bottom:10px;opacity:.5}
+
+/* ── SPINNER ── */
+.spinner{
+  width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);
+  border-top:2px solid var(--accent);border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+/* ── RESPONSIVE ── */
+@media(max-width:600px){
+  .ctrls{grid-template-columns:1fr}
+  .hero-title{font-size:52px}
+  .stats-row{flex-wrap:wrap}
+  .stat{min-width:50%}
+  .nav-links{display:none}
+  .btn-go:active{transform:translateY(0)!important}
+  .dz:hover{transform:none}
+  .dz{min-height:120px;padding:32px 16px}
+  .dz-icon{font-size:40px}
+  .dz-h{font-size:14px}
+  .dz-p{font-size:11px}
+  .card{padding:20px}
+  .wrap{padding:0 12px 40px}
+  .tabs{flex-wrap:wrap;gap:4px;padding:0 12px 16px}
+  .tab{padding:8px 16px;font-size:12px}
+  .hero-cta-row{gap:12px}
+  .btn-hero{padding:12px 24px;font-size:14px}
+  .section-header{padding:40px 12px 24px}
+  .section-title{font-size:28px}
+  .usage-grid{grid-template-columns:1fr;gap:16px}
+  .features-grid{grid-template-columns:1fr;gap:12px}
+  .feature-item{padding:14px}
+  .footer-links{flex-direction:column;gap:12px}
+}
+
+/* Touch-friendly improvements */
+@media(hover:none) and (pointer:coarse){
+  .btn:hover{transform:none}
+  .dz:hover{transform:none;border-color:var(--accent)}
+  .card:hover{transform:none}
+  .usage-card:hover{transform:none}
+  .feature-item:hover{background:none}
+  .gal-item:hover{transform:none}
+  .plt:hover{transform:none}
+  .tab:hover{background:none;border-color:#2D6A4F44;color:#6a9470}
+  .nav-link:hover{background:none}
+}
+
+/* Better focus states for accessibility */
+.btn:focus-visible,
+.dz:focus-visible,
+.tab:focus-visible,
+.nav-link:focus-visible,
+.plt:focus-visible,
+.dl:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+/* Skip link for screen readers */
+.skip-link{
+  position:absolute;left:-9999px;z-index:9999;
+  background:var(--accent);color:var(--dark);padding:8px 16px;
+  text-decoration:none;border-radius:4px;font-weight:700;
+}
+.skip-link:focus{left:20px;top:20px}
+
+/* Loading animations */
+@keyframes pulse-accent{
+  0%,100%{opacity:1}
+  50%{opacity:0.6}
+}
+.btn-go:disabled{animation:pulse-accent 2s infinite}
+
+@keyframes fadeInUp{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.card{animation:fadeInUp 0.5s ease-out}
+
+@keyframes slideIn{
+  from{opacity:0;transform:translateX(-20px)}
+  to{opacity:1;transform:translateX(0)}
+}
+.res-item{animation:slideIn 0.3s ease-out}
+
+/* Enhanced toast with better positioning */
+.toast{
+  position:fixed;bottom:22px;right:22px;
+  background:linear-gradient(135deg,var(--card),var(--dark));
+  color:#c5e8cc;padding:14px 22px;border-radius:12px;
+  font-size:13px;opacity:0;transition:opacity .3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events:none;z-index:9999;
+  border:1px solid var(--accent)44;
+  box-shadow:0 8px 24px #00000055, 0 0 40px var(--glow-accent);
+  max-width:320px;backdrop-filter:blur(8px);
+}
+.toast.show{opacity:1;animation:bounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)}
+@keyframes bounceIn{
+  0%{opacity:0;transform:scale(0.8) translateY(10px)}
+  50%{opacity:1;transform:scale(1.05) translateY(-5px)}
+  100%{opacity:1;transform:scale(1) translateY(0)}
+}
+
+/* ── API Status Banner ───────────────────── */
+.api-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 18px;background:#0d1f16;border-bottom:1px solid #1e3d28;font-size:11px}
+.api-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.3px}
+.api-pill.ok{background:#2D6A4F22;color:#6abd7c;border:1px solid #2D6A4F55}
+.api-pill.fail{background:#8B000022;color:#f08080;border:1px solid #8B000055;cursor:pointer}
+.api-pill.fail:hover{background:#8B000044}
+/* ── Manual Image Editor ─────────────────── */
+.editor-panel{background:#0d1a10;border:1px solid #2D6A4F30;border-radius:12px;padding:18px;margin-top:14px;display:none}
+.editor-panel.open{display:block}
+.editor-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.editor-slider label{display:flex;justify-content:space-between;font-size:11px;color:#6a9470;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.editor-slider input[type=range]{width:100%;accent-color:#F4A261;cursor:pointer}
+.editor-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.editor-btn{background:#1a3326;border:1px solid #2D6A4F44;color:#9fd3aa;padding:6px 14px;border-radius:7px;font-size:11px;cursor:pointer;transition:.15s}
+.editor-btn:hover{background:#2D6A4F33;border-color:#2D6A4F88}
+.editor-btn.active{background:#2D6A4F55;border-color:#F4A261;color:#F4A261}
+.crop-preview{position:relative;overflow:hidden;border-radius:8px;background:#000;margin-bottom:12px;cursor:crosshair;user-select:none;display:none}
+.crop-preview img{display:block;max-width:100%;max-height:200px;margin:0 auto}
+.crop-box{position:absolute;border:2px solid #F4A261;box-shadow:0 0 0 9999px rgba(0,0,0,0.5);pointer-events:none}
+/* ── Ready-to-Post button & card ─────────── */
+.rtp-card{background:linear-gradient(135deg,#1B4332,#0d1a10);border:1px solid #F4A26133;border-radius:12px;padding:18px;margin-top:14px}
+.rtp-card .card-title{color:#F4A261;margin-bottom:6px}
+.rtp-list{margin-top:12px}
+.rtp-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #2D6A4F20;font-size:12px}
+.rtp-item:last-child{border:none}
+/* ── Related Package card ────────────────── */
+.pkg-badge{background:linear-gradient(135deg,#F4A26122,#2D6A4F22);border:1px solid #F4A26144;border-radius:9px;padding:11px 14px;margin-top:10px;font-size:12px}
+.pkg-badge .pkg-name{font-weight:700;color:#F4A261;margin-bottom:3px}
+.pkg-badge .pkg-dur{color:#9fd3aa;font-size:11px}
+
+
+/* ─── Canvas Crop Tool ──────────────────── */
+.crop-wrap{position:relative;display:none;margin:10px 0;border-radius:10px;overflow:hidden;background:#000;cursor:crosshair;user-select:none;touch-action:none}
+.crop-wrap.active{display:block}
+.crop-canvas{display:block;max-width:100%;border-radius:10px}
+.crop-overlay{position:absolute;inset:0;pointer-events:none}
+.crop-sel{position:absolute;border:2px solid #F4A261;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);pointer-events:none;transition:none}
+.crop-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+/* ─── Gallery / Media Library ───────────── */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:12px}
+.gal-item{position:relative;border-radius:10px;overflow:hidden;background:#0d1a10;border:1px solid #2D6A4F22;cursor:pointer;transition:.2s}
+.gal-item:hover{border-color:#F4A261;transform:translateY(-2px);box-shadow:0 6px 20px #00000044}
+.gal-thumb{width:100%;height:130px;object-fit:cover;display:block;background:#0d1a10}
+.gal-video-thumb{width:100%;height:130px;object-fit:cover;background:#000;display:flex;align-items:center;justify-content:center;font-size:36px}
+.gal-meta{padding:7px 9px;font-size:10px;color:#5a7a5e}
+.gal-name{font-size:11px;color:#9fd3aa;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gal-size{color:#3d6045;margin-top:2px}
+.gal-dl{position:absolute;top:6px;right:6px;background:rgba(10,22,18,0.85);border:1px solid #F4A26155;color:#F4A261;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;text-decoration:none;opacity:0;transition:.15s}
+.gal-item:hover .gal-dl{opacity:1}
+.gal-badge{position:absolute;top:6px;left:6px;background:#F4A261;color:#0d1a10;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700}
+.gal-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.gal-chip{padding:4px 12px;border-radius:99px;font-size:11px;cursor:pointer;border:1px solid #2D6A4F44;color:#6a9470;transition:.15s;background:transparent}
+.gal-chip.active,.gal-chip:hover{background:#2D6A4F33;color:#9fd3aa;border-color:#2D6A4F}
+/* ─── Schedule/Today card upgrade ─────── */
+.sched-entry{background:#0d1a10;border:1px solid #2D6A4F22;border-radius:10px;padding:14px;margin-bottom:10px}
+.sched-dest{font-size:15px;font-weight:700;color:#F4A261;margin-bottom:4px}
+.sched-hook{font-size:12px;color:#9fd3aa;font-style:italic;margin-bottom:8px;line-height:1.5}
+.sched-caption{font-size:11px;color:#5a7a5e;margin-bottom:10px;white-space:pre-line;max-height:80px;overflow:hidden;position:relative}
+.sched-caption.expanded{max-height:none}
+.sched-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+</style>
+</head>
+<body>
+
+<!-- Skip link for accessibility -->
+<a href="#app" class="skip-link">Skip to main content</a>
+
+<!-- PARTICLES -->
+<div class="hero-particles" id="particles"></div>
+
+<!-- ═══════════════ NAVIGATION ═══════════════ -->
+<nav class="nav" id="nav">
+  <a class="nav-logo" href="#">
+    <div class="nav-logo-mark">L</div>
+    <div class="nav-name">Lavira <span>Media</span></div>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="#app">Studio</a>
+    <a class="nav-link" href="#how">How It Works</a>
+    <a class="nav-link" href="#features">Features</a>
+  </div>
+  <div class="nav-status">
+    <div class="status-dot" id="hdot" style="background:#4d7a55;box-shadow:none"></div>
+    <span id="hstat">connecting...</span>
+  </div>
+</nav>
+
+<!-- ── API Status Banner ─────────────────────────────────── -->
+<div class="api-banner" id="apiBanner" style="display:none">
+  <span style="color:#4d7a55;font-weight:600;margin-right:4px">Integrations:</span>
+  <span class="api-pill" id="pill-ffmpeg">⚙ FFmpeg</span>
+  <span class="api-pill" id="pill-claude_ai" onclick="showSetup('claude_ai')">🤖 Claude AI</span>
+  <span class="api-pill" id="pill-giphy" onclick="showSetup('giphy')">🎞 GIPHY</span>
+  <span class="api-pill" id="pill-pexels" onclick="showSetup('pexels')">🖼 Pexels</span>
+  <span class="api-pill" id="pill-instagram" onclick="showSetup('instagram')">📸 Instagram</span>
+  <span class="api-pill" id="pill-tiktok" onclick="showSetup('tiktok')">▶ TikTok</span>
+</div>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="hero">
+  <div class="hero-body">
+    <div class="hero-eyebrow">🌍 Safari Social Media · Powered by AI</div>
+    <h1 class="hero-title">
+      <span class="line1">Lavira</span>
+      <span class="line2">Media Engine</span>
+    </h1>
+    <p class="hero-sub">Drop your safari footage. Get branded content for every platform — automatically. Masai Mara to Instagram in seconds.</p>
+    <div class="hero-cta-row">
+      <a class="btn-hero btn-hero-primary" href="#app">🎬 Open Studio</a>
+      <a class="btn-hero btn-hero-secondary" href="#how">How it works →</a>
+      <button class="btn-hero btn-hero-secondary" onclick="createTodaysPost()" style="border-color:#F4A26166;color:#F4A261">⚡ Create Today’s Post</button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">6</div><div class="stat-lbl">Platforms</div></div>
+    <div class="stat"><div class="stat-num">8</div><div class="stat-lbl">Destinations</div></div>
+    <div class="stat"><div class="stat-num">13</div><div class="stat-lbl">MCP Tools</div></div>
+    <div class="stat"><div class="stat-num">AI</div><div class="stat-lbl">Captions</div></div>
+    <div class="stat"><div class="stat-num">∞</div><div class="stat-lbl">Auto Mode</div></div>
+  </div>
+
+  <!-- ════ PANEL: GALLERY ════ -->
+  <div class="panel" id="panel-gallery">
+  <div class="wrap">
+    <div class="card">
+      <div class="card-title">🖼️ Media Library</div>
+      <div class="card-desc">All processed outputs — images, videos, audio, GIFs. Tap to preview, hover to download.</div>
+      <div class="gal-filter" id="galFilter">
+        <span class="gal-chip active" onclick="filterGallery('all',this)">All</span>
+        <span class="gal-chip" onclick="filterGallery('image',this)">📷 Photos</span>
+        <span class="gal-chip" onclick="filterGallery('video',this)">🎬 Videos</span>
+        <span class="gal-chip" onclick="filterGallery('audio',this)">🎵 Audio</span>
+        <span class="gal-chip" onclick="filterGallery('post_ready',this)">🚀 Post-Ready</span>
+        <button class="gal-chip" onclick="openAdmin()" style="margin-left:auto;border-color:#2D6A4F44;color:#9fd3aa">⚙ Admin</button>
+        <button class="gal-chip" onclick="cleanupOldFiles()" style="color:#f08080;border-color:#f0808033">🗑 Clean Old</button>
+      </div>
+      <div class="gallery-grid" id="galGrid"><div class="empty"><div class="empty-icon">🖼️</div>Loading media...</div></div>
+    </div>
+  </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════ HOW IT WORKS ═══════════════ -->
+<section class="usage-section" id="how">
+  <div class="section-header">
+    <div class="section-badge">How It Works</div>
+    <h2 class="section-title">Three steps to publish-ready content</h2>
+    <p class="section-desc">No editing skills required. The engine handles everything from crop ratios to captions.</p>
+  </div>
+  <div class="usage-grid">
+    <div class="usage-card">
+      <div class="usage-step">1</div>
+      <div class="usage-title">Drop Your Media</div>
+      <div class="usage-desc">Upload raw safari footage, photos, audio or search for a GIF. Any format, up to 500 MB. The engine probes the file and detects dimensions, duration, and quality automatically.</div>
+      <div class="usage-tag">Video · Photo · Audio · GIF</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-step">2</div>
+      <div class="usage-title">Engine Processes</div>
+      <div class="usage-desc">FFmpeg crops to every platform's exact aspect ratio, boosts safari colour grade, applies the Lavira watermark, and generates 6 platform variants in parallel. Sharp handles images. Claude writes the caption.</div>
+      <div class="usage-tag">FFmpeg · Sharp · Claude AI</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-step">3</div>
+      <div class="usage-title">Download &amp; Post</div>
+      <div class="usage-desc">Review your branded variants, edit the AI caption if needed, hit Approve, and download per-platform files. Or connect social tokens and publish directly. History is logged automatically.</div>
+      <div class="usage-tag">Instagram · TikTok · Facebook · Twitter</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-step">⚡</div>
+      <div class="usage-title">Auto Mode (Daily)</div>
+      <div class="usage-desc">The scheduler runs every day at 06:00 EAT and generates a fresh promo package automatically — cycling through all 8 safari destinations so your feed never repeats. Zero user input needed.</div>
+      <div class="usage-tag">Scheduler · Smart Rotation · SQLite Memory</div>
+    </div>
+    <div class="usage-card">
+      <div class="usage-step">🤖</div>
+      <div class="usage-title">MCP Agent Mode</div>
+      <div class="usage-desc">Connect Claude Desktop to the 13-tool MCP server and let an AI agent run the entire pipeline autonomously. Just say "Process today's Masai Mara video" and it handles everything.</div>
+      <div class="usage-tag">Claude Desktop · JSON-RPC · 13 Tools</div>
+    </div>
+    <!-- Funnel/Tailscale card intentionally removed (dev-only). -->
+  </div>
+</section>
+
+<!-- ═══════════════ FEATURES STRIP ═══════════════ -->
+<section class="features-strip" id="features">
+  <div class="features-grid">
+    <div class="feature-item"><div class="feature-icon">🎬</div><div><div class="feature-title">6 Platform Variants</div><div class="feature-desc">Reel 9:16, TikTok 9:16, Post 1:1, Short 9:16, Facebook 16:9, Twitter 16:9</div></div></div>
+    <div class="feature-item"><div class="feature-icon">🎨</div><div><div class="feature-title">Safari Colour Grade</div><div class="feature-desc">+3% brightness, +5% contrast, +10% saturation — tuned for outdoor wildlife footage</div></div></div>
+    <div class="feature-item"><div class="feature-icon">💧</div><div><div class="feature-title">Auto Watermark</div><div class="feature-desc">LAVIRASAFARIS.COM applied to every video and image output via FFmpeg drawtext</div></div></div>
+    <div class="feature-item"><div class="feature-icon">🧠</div><div><div class="feature-title">AI Captions</div><div class="feature-desc">Claude writes unique captions per destination, avoiding repetition using memory history</div></div></div>
+    <div class="feature-item"><div class="feature-icon">📅</div><div><div class="feature-title">Daily Scheduler</div><div class="feature-desc">Generates a promo at 06:00 EAT every day. Rotates 8 destinations over 7-day windows</div></div></div>
+    <div class="feature-item"><div class="feature-icon">🗃️</div><div><div class="feature-title">SQLite Memory</div><div class="feature-desc">Every job logged with destination, caption, status, approval. Smart LRU rotation</div></div></div>
+    <div class="feature-item"><div class="feature-icon">🖼️</div><div><div class="feature-title">Image Engine</div><div class="feature-desc">Sharp: 5 profiles, brand tint, SVG watermark composite, cover/contain fit modes</div></div></div>
+    <div class="feature-item"><div class="feature-icon">🔊</div><div><div class="feature-title">Audio Processing</div><div class="feature-desc">FFmpeg loudnorm to -16 LUFS broadcast standard, fade in/out, MP3 + OGG export</div></div></div>
+  </div>
+</section>
+
+<!-- ═══════════════ APP / STUDIO ═══════════════ -->
+<section class="app-section" id="app">
+  <div class="section-header">
+    <div class="section-badge">Studio</div>
+    <h2 class="section-title">Create Your Content</h2>
+    <p class="section-desc">Drop media, choose platforms, hit process. Everything else is automatic.</p>
+  </div>
+
+  <!-- Funnel banner intentionally removed (dev-only). -->
+
+  <!-- Media type sub-tabs -->
+  <div class="tabs">
+    <button class="tab active" id="st-video" onclick="showSubTab('video')">🎬 Video</button>
+    <button class="tab" id="st-photo" onclick="showSubTab('photo')">📷 Photo</button>
+    <button class="tab" id="st-audio" onclick="showSubTab('audio')">🎵 Audio</button>
+    <button class="tab" id="st-gif" onclick="showSubTab('gif')">🦁 GIF Search</button>
+    <button class="tab" id="st-auto" onclick="showSubTab('auto')">🤖 Auto Promo</button>
+    <button class="tab" id="st-processing" onclick="showTab('processing')">⚙️ Processing <span id="jobBadge" style="display:none;background:var(--amber);color:var(--dark);border-radius:99px;padding:1px 7px;font-size:10px;margin-left:4px"></span></button>
+    <button class="tab" id="st-output" onclick="showTab('output')">✅ Output</button>
+    <button class="tab" id="st-history" onclick="showTab('history');loadHistory();loadFiles();loadSchedule()">🗃️ History</button>
+    <button class="tab" id="st-gallery" onclick="showTab('gallery');loadGallery()">🖼️ Gallery</button>
+  </div>
+
+  <!-- Smart destination chip -->
+  <div class="wrap">
+    <div class="dest-chip">
+      <div class="dest-chip-dot"></div>
+      Smart destination today: <strong id="destChip">loading...</strong>
+    </div>
+  </div>
+
+  <!-- Today's Promo Dashboard Card -->
+  <div class="wrap">
+    <div class="card" id="todayPromoCard" style="display:none">
+      <div class="card-title">📅 Today's Promo</div>
+      <div class="card-desc">Auto-generated daily content ready for approval</div>
+      <div id="todayPromoContent">
+        <div style="color:#4d7a55;font-size:12px;padding:8px 0">Loading today's promo...</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-sm btn-go" onclick="approveTodayPromo()">✓ Approve & Post</button>
+        <button class="btn btn-sm" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="showSubTab('history')">View All →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ PANEL: VIDEO ════ -->
+  <div class="panel active" id="panel-video">
+  <div class="wrap">
+    <div class="card">
+      <span class="card-icon">🎬</span>
+      <div class="card-title">Upload Safari Video</div>
+      <div class="card-desc">Drop any raw footage — game drive, drone, phone camera. Any format up to 500 MB.</div>
+      <div class="dz" id="vdz" role="button" tabindex="0" aria-label="Upload safari video - drop files here or click to browse">
+        <input type="file" id="vfi" accept="video/*" aria-label="Video file input">
+        <span class="dz-icon">🎥</span>
+        <div class="dz-h">Drop video here or click to browse</div>
+        <div class="dz-p">MP4 &bull; MOV &bull; AVI &bull; MKV &bull; WebM &bull; M4V</div>
+      </div>
+      <div class="finfo" id="vfinfo"></div>
+      <video id="vpreview" controls></video>
+    </div>
+    <div class="card">
+      <div class="card-title">Target Platforms</div>
+      <div class="card-desc">Pre-selected for maximum reach. Each gets the exact correct aspect ratio automatically.</div>
+      <div class="sec-lbl">Select Platforms</div>
+      <div class="plats" id="vpplats"></div>
+      <div class="sec-lbl">Transform Options</div>
+      <div class="ctrls">
+        <div class="ctrl"><label>Trim Start (sec)</label><input type="number" id="vtrimS" value="0" min="0"></div>
+        <div class="ctrl"><label>Clip Length (sec)</label><input type="number" id="vtrimL" min="1" placeholder="Full video"></div>
+        <div class="ctrl"><label>Playback Speed</label>
+          <select id="vspeed">
+            <option value="0.5">0.5x — Slow motion</option>
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x — Normal</option>
+            <option value="1.5">1.5x — Fast</option>
+            <option value="2">2x — Very fast</option>
+          </select>
+        </div>
+        <div class="ctrl"><label>Output Quality</label>
+          <select id="vqual">
+            <option value="high" selected>High — 2.5 Mbps</option>
+            <option value="low">Compressed — 800 Kbps</option>
+          </select>
+        </div>
+        <div class="ctrl" style="grid-column:1/-1"><label>Context (optional)</label><textarea id="vctx" placeholder="e.g. Lion cubs at Masai Mara, golden hour light, mother and two cubs playing..."></textarea></div>
+      </div>
+      <button class="btn btn-go" id="vBtn" disabled onclick="submitVideo()">▶ Process Video</button>
+      <div class="prog" id="vprog"><div class="prog-track"><div class="prog-bar" id="vprogBar"></div></div><div class="prog-msg" id="vprogMsg"></div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: PHOTO ════ -->
+  <div class="panel" id="panel-photo">
+  <div class="wrap">
+    <div class="card">
+      <span class="card-icon">📷</span>
+      <div class="card-title">Upload Safari Photo</div>
+      <div class="card-desc">JPG, PNG, WebP, HEIC — portrait or landscape, any resolution.</div>
+      <div class="dz" id="pdz" role="button" tabindex="0" aria-label="Upload safari photo - drop files here or click to browse">
+        <input type="file" id="pfi" accept="image/*" aria-label="Photo file input">
+        <span class="dz-icon">🦒</span>
+        <div class="dz-h">Drop photo here or click to browse</div>
+        <div class="dz-p">JPG &bull; PNG &bull; WebP &bull; HEIC &bull; AVIF</div>
+      </div>
+      <div class="finfo" id="pfinfo"></div>
+      <img id="ppreview" alt="preview">
+    </div>
+    <div class="card">
+      <div class="sec-lbl">Output Profiles</div>
+      <div class="plats" id="ppplats"></div>
+      <div class="ctrls">
+        <div class="ctrl"><label>Fit Mode</label>
+          <select id="pfit">
+            <option value="cover">Cover — crop to fill</option>
+            <option value="contain">Contain — letterbox</option>
+          </select>
+        </div>
+        <div class="ctrl"><label>Context (optional)</label><input type="text" id="pctx" placeholder="e.g. Elephant herd at Amboseli, Mt. Kilimanjaro background..."></div>
+      </div>
+      
+      <!-- Manual Image Editor -->
+      <div style="margin-top:12px">
+        <button class="btn btn-sm" style="width:auto;padding:7px 16px;font-size:12px;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="toggleEditor(this)">✂ Manual Adjustments</button>
+      </div>
+      <div class="editor-panel" id="imgEditor">
+        <div class="editor-btns">
+          <button class="editor-btn" onclick="setRotate(0)" id="rot0" title="No rotation">↕ 0°</button>
+          <button class="editor-btn" onclick="setRotate(90)" id="rot90">↻ 90°</button>
+          <button class="editor-btn" onclick="setRotate(180)" id="rot180">↻ 180°</button>
+          <button class="editor-btn" onclick="setRotate(270)" id="rot270">↺ 270°</button>
+          <button class="editor-btn" onclick="toggleFlip('H')" id="flipH">↔ Flip H</button>
+          <button class="editor-btn" onclick="toggleFlip('V')" id="flipV">↕ Flip V</button>
+          <button class="editor-btn" onclick="resetEdits()" style="margin-left:auto;color:#f08080;border-color:#f0808044">✕ Reset</button>
+        </div>
+        <div class="editor-row">
+          <div class="editor-slider"><label>Brightness <span id="bval">1.0</span></label><input type="range" id="ebrightness" min="50" max="200" value="100" oninput="updateSlider('brightness',this.value/100,'bval',1)"></div>
+          <div class="editor-slider"><label>Contrast <span id="cval">1.0</span></label><input type="range" id="econtrast" min="50" max="200" value="100" oninput="updateSlider('contrast',this.value/100,'cval',1)"></div>
+          <div class="editor-slider"><label>Saturation <span id="sval">1.0</span></label><input type="range" id="esaturation" min="0" max="300" value="100" oninput="updateSlider('saturation',this.value/100,'sval',1)"></div>
+          <div class="editor-slider"><label>Hue <span id="hval">0°</span></label><input type="range" id="ehue" min="-180" max="180" value="0" oninput="updateSlider('hue',parseInt(this.value),'hval',0,'°')"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+          <label style="font-size:11px;color:#6a9470;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="esharpen" style="accent-color:#F4A261"> Sharpen</label>
+          <label style="font-size:11px;color:#6a9470;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ewatermark" checked style="accent-color:#F4A261"> Watermark</label>
+          <label style="font-size:11px;color:#6a9470;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="ebrandtint" style="accent-color:#F4A261"> Brand Tint</label>
+        </div>
+        <!-- Canvas Crop Tool -->
+        <div style="margin-top:10px">
+          <button class="editor-btn" onclick="toggleCrop()" id="cropToggleBtn">✂ Enable Crop</button>
+          <span style="font-size:10px;color:#3d6045;margin-left:8px" id="cropHint">Upload a photo first</span>
+        </div>
+        <div class="crop-wrap" id="cropWrap">
+          <canvas id="cropCanvas" class="crop-canvas"></canvas>
+          <div class="crop-sel" id="cropSel" style="display:none"></div>
+        </div>
+        <div class="crop-actions" id="cropActions" style="display:none">
+          <button class="editor-btn btn-go" onclick="applyCrop()" style="background:#2D6A4F33;border-color:#2D6A4F;color:#F4A261">✓ Apply Crop</button>
+          <button class="editor-btn" onclick="clearCrop()">✕ Clear</button>
+          <span id="cropCoords" style="font-size:10px;color:#4d7a55;align-self:center"></span>
+        </div>
+      </div>
+
+      <button class="btn btn-go" id="pBtn" disabled onclick="submitPhoto()">📷 Process Photo</button>
+      <div class="prog" id="pprog"><div class="prog-track"><div class="prog-bar" id="pprogBar"></div></div><div class="prog-msg" id="pprogMsg"></div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: AUDIO ════ -->
+  <div class="panel" id="panel-audio">
+  <div class="wrap">
+    <div class="card">
+      <span class="card-icon">🎵</span>
+      <div class="card-title">Upload Audio</div>
+      <div class="card-desc">Safari sounds, narration, or ambient recordings. Normalised to broadcast standard and exported in multiple formats.</div>
+      <div class="dz" id="adz">
+        <input type="file" id="afi" accept="audio/*">
+        <span class="dz-icon">🔊</span>
+        <div class="dz-h">Drop audio here or click to browse</div>
+        <div class="dz-p">MP3 &bull; WAV &bull; M4A &bull; OGG &bull; FLAC</div>
+      </div>
+      <div class="finfo" id="afinfo"></div>
+    </div>
+    <div class="card">
+      <div class="ctrls">
+        <div class="ctrl"><label>Trim Start (sec)</label><input type="number" id="atrimS" value="0" min="0"></div>
+        <div class="ctrl" style="grid-column:1/-1"><label>Clip Duration Preset</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="btn btn-sm btn-outline" id="apr15" onclick="setAudioPreset(15)">15s</button><button class="btn btn-sm btn-outline" id="apr30" onclick="setAudioPreset(30)">30s</button><button class="btn btn-sm btn-outline" id="apr45" onclick="setAudioPreset(45)">45s</button><button class="btn btn-sm btn-go" id="apr60" onclick="setAudioPreset(60)">60s ✅</button></div><input type="hidden" id="atrimL" value="60"></div>
+        <div class="ctrl" style="grid-column:1/-1"><label>Context (optional)</label><input type="text" id="actx" placeholder="e.g. Morning savanna ambience at Samburu, birds and distant lion roars..."></div>
+      </div>
+      <button class="btn btn-go" id="aBtn" disabled onclick="submitAudio()">🎵 Process Audio</button>
+      <div class="prog" id="aprog"><div class="prog-track"><div class="prog-bar" id="aprogBar"></div></div><div class="prog-msg" id="aprogMsg"></div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: GIF ════ -->
+  <div class="panel" id="panel-gif">
+  <div class="wrap">
+    <div class="card">
+      <span class="card-icon">🦁</span>
+      <div class="card-title">Search Safari GIFs</div>
+      <div class="card-desc">Find a safari GIF from GIPHY, download as MP4, and generate a branded post automatically.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="gifQ" placeholder="wildebeest migration, elephant, safari sunset, lion pride..." style="flex:1;min-width:220px;background:#0b1810;border:1px solid #2D6A4F33;border-radius:8px;padding:9px 12px;color:#c5e8cc;font-size:13px;outline:none">
+        <button class="btn btn-sm btn-go" onclick="searchGif()" style="width:auto">Search</button>
+        <button class="btn btn-sm" onclick="gifPrevPage()" style="width:auto;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa">← Prev</button>
+        <button class="btn btn-sm" onclick="gifNextPage()" style="width:auto;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa">Next →</button>
+      </div>
+      <div style="font-size:10px;color:#4d7a55;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Quick picks</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="gifSuggestions"></div>
+      <div class="gif-grid" id="gifGrid"><div class="empty"><div class="empty-icon">🦓</div>Search for safari GIFs above</div></div>
+      <div style="margin-top:14px;display:none" id="gifUseRow">
+        <button class="btn btn-go" onclick="submitGif()">🦁 Use Selected GIF</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: AUTO PROMO ════ -->
+  <div class="panel" id="panel-auto">
+  <div class="wrap">
+    <div class="card">
+      <span class="card-icon">🤖</span>
+      <div class="card-title">Auto Promo Generator</div>
+      <div class="card-desc">No upload needed. The engine finds a Pexels stock safari image, applies Lavira branding, and generates a full caption — ready to post in under 30 seconds.</div>
+      <div class="ctrls" style="grid-template-columns:1fr 1fr">
+        <div class="ctrl"><label>Destination</label><select id="autoDestSel"><option value="">Smart Pick (LRU)</option></select></div>
+        <div class="ctrl"><label>Content Theme</label><select id="autoTheme"><option value="wildlife_spotlight">Wildlife Spotlight</option><option value="destination_profile">Destination Profile</option><option value="safari_package_promo">Package Promo</option><option value="guest_testimonial">Guest Testimonial</option><option value="conservation">Conservation</option><option value="cultural_moment">Cultural Moment</option><option value="adventure_activity">Adventure Activity</option><option value="sunrise_sunset">Sunrise /Sunset</option></select></div>
+        <div class="ctrl" style="grid-column:1/-1"><label>Context (optional)</label><input type="text" id="autoCtx" placeholder="e.g. Wildebeest migration season, river crossing..."></div>
+      </div>
+      <button class="btn btn-go" id="autoBtn" onclick="submitAuto()">🤖 Generate Auto Promo</button>
+      <div class="prog" id="autoprog"><div class="prog-track"><div class="prog-bar" id="autoprogBar"></div></div><div class="prog-msg" id="autoprogMsg"></div></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: PROCESSING ════ -->
+  <div class="panel" id="panel-processing">
+  <div class="wrap">
+    <div id="jobList"><div class="empty"><div class="empty-icon">⚙️</div>No active jobs. Submit media from the tabs above.</div></div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: OUTPUT ════ -->
+  <div class="panel" id="panel-output">
+  <div class="wrap">
+    <div id="outputArea"><div class="empty"><div class="empty-icon">✅</div>No completed jobs yet.</div></div>
+  </div>
+  </div>
+
+  <!-- ════ PANEL: HISTORY ════ -->
+  <div class="panel" id="panel-history">
+  <div class="wrap">
+    <div class="card">
+      <div class="card-title">🗃️ Job History</div>
+      <div class="card-desc">All media processed on this machine, logged to SQLite.</div>
+      <div id="histList"><div class="empty"><div class="empty-icon">📋</div>No history yet.</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📁 Output Files</div>
+      <div class="card-desc">All processed files ready for download.</div>
+      <div id="filesList"><div class="empty"><div class="empty-icon">📂</div>No files yet.</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📅 Daily Schedule</div>
+      <div class="card-desc">Auto-generated every morning at 06:00 EAT. Approve to mark ready for posting.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm btn-go" style="flex:1" onclick="triggerDailyPromo()">⚡ Generate Now</button>
+        <button class="btn btn-sm" style="flex:1;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="loadSchedule()">↻ Refresh</button>
+      </div>
+      <div id="schedList"><div class="empty"><div class="empty-icon">⏰</div>Loading schedule...</div></div>
+    </div>
+  </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="footer">
+  <div class="footer-logo">Lavira <span>Safaris</span></div>
+  <div class="footer-sub">
+    Premier safari operator · Nairobi, Kenya<br>
+    +254 721 757 387 &bull; info@lavirasafaris.com &bull; lavirasafaris.com
+  </div>
+  <div class="footer-links">
+    <a class="footer-link" href="https://lavirasafaris.com" target="_blank">Website</a>
+    <a class="footer-link" href="https://instagram.com/lavirasafaris" target="_blank">Instagram</a>
+    <a class="footer-link" href="https://web.facebook.com/lavirasafaris" target="_blank">Facebook</a>
+    <a class="footer-link" href="/api/health" target="_blank">API Health</a>
+  </div>
+  <div style="margin-top:16px;font-size:10px;color:#2D6A4F66">
+    Lavira Media Engine v3.0 · Powered by FFmpeg, Sharp, Claude AI, Tailscale Funnel
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────
+const PLAT={
+  instagram_reel:{label:'Instagram Reel',res:'1080×1920'},
+  tiktok:{label:'TikTok',res:'1080×1920'},
+  instagram_post:{label:'Instagram Post',res:'1080×1080'},
+  youtube_short:{label:'YouTube Short',res:'1080×1920'},
+  facebook:{label:'Facebook',res:'1280×720'},
+  twitter:{label:'Twitter/X',res:'1280×720'}
+};
+const PHOTO_PROFILES={
+  instagram_portrait:{label:'IG Portrait',res:'1080×1350'},
+  instagram_square:{label:'IG Square',res:'1080×1080'},
+  instagram_story:{label:'Story/Reel Cover',res:'1080×1920'},
+  facebook_cover:{label:'Facebook Cover',res:'1640×924'},
+  twitter_card:{label:'Twitter Card',res:'1200×628'}
+};
+const GIF_SUGGESTIONS=['safari sunset','wildebeest migration','elephant herd','lion pride','giraffe kenya','masai mara wildlife','cheetah running','hippo river'];
+
+// ─── STATE ────────────────────────────────────────────────────
+let vSel=['instagram_reel','tiktok','facebook'];
+let pSel=['instagram_portrait','instagram_story','instagram_square'];
+let vFile=null,pFile=null,aFile=null,selectedGif=null;
+let activeJobs={},pollTimers={};
+let currentPanel='video';
+let imgEdits={crop:null,rotate:0,flip:{h:false,v:false},brightness:1,contrast:1,saturation:1,hue:0,sharpen:false,watermark:true,brandtint:false};
+
+// ─── IMAGE EDIT FUNCTIONS ──────────────────────────────────────
+function toggleEditor(btn){
+  const panel=document.getElementById('imgEditor');
+  const isOpen=panel.classList.contains('open');
+  panel.classList.toggle('open');
+  btn.textContent=isOpen?'✂ Manual Adjustments':'✂ Hide Adjustments';
+}
+
+function setRotate(deg){
+  imgEdits.rotate=deg;
+  document.querySelectorAll('#rot0,#rot90,#rot180,#rot270').forEach(b=>{
+    b.classList.toggle('active',parseInt(b.id.replace('rot',''))===deg);
+  });
+  toast(`↻ Rotation set to ${deg}°`);
+}
+
+function toggleFlip(dir){
+  if(dir==='H') imgEdits.flip.h=!imgEdits.flip.h;
+  else if(dir==='V') imgEdits.flip.v=!imgEdits.flip.v;
+  document.getElementById('flipH').classList.toggle('active',imgEdits.flip.h);
+  document.getElementById('flipV').classList.toggle('active',imgEdits.flip.v);
+  toast(`↔ Flip ${dir} ${imgEdits.flip[dir.toLowerCase()]?'enabled':'disabled'}`);
+}
+
+function updateSlider(prop,val,id,mult,suffix=''){
+  imgEdits[prop]=val;
+  document.getElementById(id).textContent=(val*mult).toFixed(1)+suffix;
+}
+
+function resetEdits(){
+  imgEdits={crop:null,rotate:0,flip:{h:false,v:false},brightness:1,contrast:1,saturation:1,hue:0,sharpen:false,watermark:true,brandtint:false};
+  // Reset UI
+  document.querySelectorAll('#rot0,#rot90,#rot180,#rot270,#flipH,#flipV').forEach(b=>b.classList.remove('active'));
+  document.getElementById('ebrightness').value=100;
+  document.getElementById('econtrast').value=100;
+  document.getElementById('esaturation').value=100;
+  document.getElementById('ehue').value=0;
+  document.getElementById('esharpen').checked=false;
+  document.getElementById('ewatermark').checked=true;
+  document.getElementById('ebrandtint').checked=false;
+  document.querySelectorAll('#bval,#cval,#sval,#hval').forEach(el=>{
+    const id=el.id;
+    if(id==='bval') el.textContent='1.0';
+    else if(id==='cval') el.textContent='1.0';
+    else if(id==='sval') el.textContent='1.0';
+    else if(id==='hval') el.textContent='0°';
+  });
+  clearCrop();
+  toast('🔄 All edits reset');
+}
+
+// ─── PARTICLES ────────────────────────────────────────────────
+(function spawnParticles(){
+  const c=document.getElementById('particles');
+  const colors=['#2D6A4F','#40916C','#F4A261','#FBBF77','#1B4332'];
+  for(let i=0;i<18;i++){
+    const p=document.createElement('div');
+    p.className='particle';
+    const size=Math.random()*8+3;
+    p.style.cssText=`width:${size}px;height:${size}px;left:${Math.random()*100}%;background:${colors[Math.floor(Math.random()*colors.length)]};animation-duration:${Math.random()*15+10}s;animation-delay:${Math.random()*10}s`;
+    c.appendChild(p);
+  }
+})();
+
+// ─── NAV SCROLL ───────────────────────────────────────────────
+window.addEventListener('scroll',()=>{
+  document.getElementById('nav').classList.toggle('scrolled',window.scrollY>60);
+});
+
+// ─── INIT ─────────────────────────────────────────────────────
+async function init(){
+  // Health check — AbortController guards against infinite hang
+  try{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),4000);
+    const h=await fetch('/api/health',{signal:ctrl.signal}).then(r=>r.json());
+    clearTimeout(tid);
+    document.getElementById('hdot').style.cssText='width:8px;height:8px;border-radius:50%;background:#52c78a;box-shadow:0 0 8px #52c78a;animation:pulse 2s infinite';
+    document.getElementById('hstat').textContent=h.engine||'Engine ready';
+  }catch(e){
+    document.getElementById('hdot').style.background='#f08080';
+    document.getElementById('hstat').textContent=e.name==='AbortError'?'Timeout — check server':'Offline';
+  }
+
+  // Smart destination — guarded
+  try{
+    const ctrl2=new AbortController();
+    const tid2=setTimeout(()=>ctrl2.abort(),3000);
+    const d=await fetch('/api/caption',{signal:ctrl2.signal}).then(r=>r.json());
+    clearTimeout(tid2);
+    document.getElementById('destChip').textContent=d.destination||'Masai Mara';
+  }catch(e){document.getElementById('destChip').textContent='Masai Mara';}
+
+  // Load today's promo
+  // Only render Today’s Promo when History tab is used (keeps initial UI focused).
+  // loadTodayPromo() is triggered by History tab click.
+
+  buildPlatGrid('vpplats',PLAT,vSel,id=>toggleSel(vSel,id));
+  buildPlatGrid('ppplats',PHOTO_PROFILES,pSel,id=>toggleSel(pSel,id));
+
+  // GIF suggestions
+  const sg=document.getElementById('gifSuggestions');
+  GIF_SUGGESTIONS.forEach(s=>{
+    const b=document.createElement('button');
+    b.className='btn btn-sm btn-outline';
+    b.style.cssText='font-size:10px;padding:5px 10px';
+    b.textContent=s;
+    b.onclick=()=>{document.getElementById('gifQ').value=s;searchGif();};
+    sg.appendChild(b);
+  });
+
+  // GIPHY: Enter triggers search
+  try{
+    const gi=document.getElementById('gifQ');
+    if(gi){
+      gi.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); searchGif(true); } });
+    }
+  }catch(_){}
+
+  loadHistory();loadFiles();loadSchedule();
+  setupDrops();
+}
+
+function buildPlatGrid(id,platforms,selArr,toggleFn){
+  const g=document.getElementById(id);if(!g)return;
+  Object.entries(platforms).forEach(([pid,p])=>{
+    const d=document.createElement('div');
+    d.className='plt'+(selArr.includes(pid)?' on':'');
+    d.dataset.id=pid;
+    d.innerHTML=`<div class="plt-name">${p.label}<span class="chk">✓</span></div><div class="plt-res">${p.res}</div>`;
+    d.onclick=()=>{toggleFn(pid);d.classList.toggle('on');};
+    g.appendChild(d);
+  });
+}
+
+function toggleSel(arr,id){const i=arr.indexOf(id);if(i>=0)arr.splice(i,1);else arr.push(id);}
+
+// ─── TAB ROUTING ──────────────────────────────────────────────
+const SUB_TABS=['video','photo','audio','gif','auto'];
+const MAIN_TABS=['processing','output','history','gallery'];
+
+function showSubTab(name){
+  [...SUB_TABS,...MAIN_TABS].forEach(n=>{
+    const panel=document.getElementById('panel-'+n);
+    if(panel) panel.classList.toggle('active',n===name);
+    const tab=document.getElementById('st-'+n);
+    if(tab) tab.classList.toggle('active',n===name);
+  });
+  currentPanel=name;
+}
+function showTab(name){
+  showSubTab(name);
+  if (name === 'history') {
+    try { loadTodayPromo(); } catch(_) {}
+  }
+}
+
+// ─── DROP ZONES ───────────────────────────────────────────────
+function setupDrops(){
+  setupDrop('vdz','vfi',f=>{
+    if(!f||!f.type.startsWith('video/')){toast('Please select a video file');return;}
+    vFile=f;showFinfo('vfinfo',f);
+    const vp=document.getElementById('vpreview');
+    vp.src=URL.createObjectURL(f);vp.style.display='block';
+    document.getElementById('vBtn').disabled=false;
+    document.getElementById('results')&&(document.getElementById('results').style.display='none');
+  });
+  setupDrop('pdz','pfi',f=>{
+    if(!f||!f.type.startsWith('image/')){toast('Please select an image');return;}
+    pFile=f;showFinfo('pfinfo',f);
+    const pp=document.getElementById('ppreview');
+    pp.src=URL.createObjectURL(f);pp.style.display='block';
+    document.getElementById('pBtn').disabled=false;
+  });
+  setupDrop('adz','afi',f=>{
+    if(!f||!f.type.startsWith('audio/')){toast('Please select an audio file');return;}
+    aFile=f;showFinfo('afinfo',f);
+    document.getElementById('aBtn').disabled=false;
+  });
+}
+
+function setupDrop(dzId,inputId,onFile){
+  const dz=document.getElementById(dzId);
+  const fi=document.getElementById(inputId);
+  if(!dz||!fi)return;
+  fi.onchange=e=>onFile(e.target.files[0]);
+  dz.ondragover=e=>{e.preventDefault();dz.classList.add('over');dz.style.animation='none';};
+  dz.ondragleave=e=>{e.preventDefault();if(!dz.contains(e.relatedTarget))dz.classList.remove('over');};
+  dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');onFile(e.dataTransfer.files[0]);};
+  // Add click feedback
+  dz.onclick=()=>{dz.style.transform='scale(0.98)';setTimeout(()=>{dz.style.transform='';},150);fi.click();};
+  // Keyboard support
+  dz.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}};
+}
+
+function showFinfo(id,file){
+  const el=document.getElementById(id);if(!el)return;
+  el.style.display='block';
+  el.style.animation='fadeInUp 0.3s ease-out';
+  const sizeMB=(file.size/1048576).toFixed(1);
+  const sizeColor=sizeMB>100?'#f08080':sizeMB>50?'#F4A261':'#52c78a';
+  el.innerHTML=`✓ <strong style="color:var(--accent-light)">${file.name}</strong> &nbsp;·&nbsp; <span style="color:${sizeColor}">${sizeMB} MB</span>`;
+}
+
+// ─── SUBMIT HANDLERS ──────────────────────────────────────────
+async function submitVideo(){
+  if(!vFile||!vSel.length){toast('Upload a video and pick at least one platform');return;}
+  const fd=new FormData();
+  fd.append('video',vFile);fd.append('platforms',JSON.stringify(vSel));
+  fd.append('trimStart',document.getElementById('vtrimS').value||'0');
+  const tl=document.getElementById('vtrimL').value;if(tl)fd.append('trimDuration',tl);
+  fd.append('speed',document.getElementById('vspeed').value);
+  fd.append('quality',document.getElementById('vqual').value);
+  const ctx=document.getElementById('vctx').value;if(ctx)fd.append('context',ctx);
+  setButtonLoading('vBtn',true,'Uploading video...');
+  await submitMedia(fd,'/api/intake/video','vBtn','vprog','vprogBar','vprogMsg','Video');
+}
+async function submitPhoto(){
+  if(!pFile||!pSel.length){toast('Upload a photo and pick at least one profile');return;}
+  const fd=new FormData();
+  fd.append('photo',pFile);fd.append('profiles',JSON.stringify(pSel));
+  fd.append('fit',document.getElementById('pfit').value);
+  const ctx=document.getElementById('pctx').value;if(ctx)fd.append('context',ctx);
+  // Add image edits if any modifications were made
+  const hasEdits=imgEdits.crop||imgEdits.rotate||imgEdits.flip.h||imgEdits.flip.v||
+                 imgEdits.brightness!==1||imgEdits.contrast!==1||imgEdits.saturation!==1||imgEdits.hue!==0||
+                 !imgEdits.watermark||imgEdits.sharpen||imgEdits.brandtint;
+  if(hasEdits) fd.append('edits',JSON.stringify(imgEdits));
+  await submitMedia(fd,'/api/intake/photo','pBtn','pprog','pprogBar','pprogMsg','Photo');
+}
+async function submitAudio(){
+  if(!aFile){toast('Upload an audio file');return;}
+  const fd=new FormData();
+  fd.append('audio',aFile);
+  fd.append('trimStart',document.getElementById('atrimS').value||'0');
+  const tl=document.getElementById('atrimL').value;if(tl)fd.append('trimDuration',tl);
+  const ctx=document.getElementById('actx').value;if(ctx)fd.append('context',ctx);
+  await submitMedia(fd,'/api/intake/audio','aBtn','aprog','aprogBar','aprogMsg','Audio');
+}
+async function submitAuto(){
+  const fd=new FormData();
+  const destination = document.getElementById('autoDestSel')?.value;
+  const theme       = document.getElementById('autoTheme')?.value;
+  const context     = document.getElementById('autoCtx')?.value;
+  if(destination) fd.append('destination', destination);
+  if(theme) fd.append('theme', theme);
+  if(context) fd.append('context', context);
+  setButtonLoading('autoBtn', true, 'Generating...');
+  document.getElementById('autoprog').style.display='block';
+  setProg('autoprogBar','autoprogMsg',12,'Generating auto promo...');
+  try{
+    const d = await fetch('/api/intake/auto',{method:'POST',body:fd}).then(r=>r.json());
+    if(d.error) throw new Error(d.error);
+    registerJob(d.jobId, d.promo, 'Auto Promo');
+    showSubTab('processing');
+    toast('🤖 Auto promo generation started');
+  }catch(e){
+    toast('Error: '+e.message);
+  }finally{
+    setButtonLoading('autoBtn', false, '🤖 Generate Auto Promo');
+  }
+}
+async function submitGif(){
+  if(!selectedGif){toast('Select a GIF first');return;}
+  try{
+    showSubTab('processing');toast('Fetching GIF and generating promo...');
+    const d=await fetch('/api/intake/giphy/use',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({giphyId:selectedGif.id,title:selectedGif.title})}).then(r=>r.json());
+    if(d.error)throw new Error(d.error);
+    registerJob(d.jobId,d.promo,'GIF: '+selectedGif.title);
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function submitMedia(fd,url,btnId,progId,barId,msgId,type){
+  const btn=document.getElementById(btnId);
+  setButtonLoading(btnId,true,'Uploading '+type.toLowerCase()+'...');
+  document.getElementById(progId).style.display='block';
+  setProg(barId,msgId,8,'Uploading '+type.toLowerCase()+'...');
+  try{
+    const d=await fetch(url,{method:'POST',body:fd}).then(r=>r.json());
+    if(d.error)throw new Error(d.error);
+    setProg(barId,msgId,22,'Processing started — FFmpeg running...');
+    setButtonLoading(btnId,true,'Processing...');
+    registerJob(d.jobId,d.promo,type);
+    showSubTab('processing');
+    toast('🎬 '+type+' submitted — processing started');
+    setButtonLoading(btnId,false,'✅ Done!');
+    setTimeout(()=>{setButtonLoading(btnId,false,'▶ Process '+type);},3000);
+  }catch(e){
+    toast('Error: '+e.message);
+    setButtonLoading(btnId,false,'▶ Process '+type);
+    document.getElementById(progId).style.display='none';
+  }
+}
+
+function setProg(barId,msgId,pct,msg){
+  document.getElementById(barId).style.width=pct+'%';
+  document.getElementById(msgId).textContent=msg;
+}
+
+// ─── JOB MANAGEMENT ───────────────────────────────────────────
+function registerJob(jobId,promo,type){
+  activeJobs[jobId]={jobId,promo,type,status:'processing'};
+  renderJobCard(jobId);updateJobBadge();
+  if(!pollTimers[jobId])pollTimers[jobId]=setInterval(()=>pollJob(jobId),2500);
+}
+
+function renderJobCard(jobId){
+  const j=activeJobs[jobId];if(!j)return;
+  const jl=document.getElementById('jobList');
+  if(jl.querySelector('.empty'))jl.innerHTML='';
+  let card=document.getElementById('jcard-'+jobId);
+  if(!card){card=document.createElement('div');card.id='jcard-'+jobId;card.className='job-card';jl.prepend(card);}
+  const cls=j.status==='done'?'badge-done':j.status==='error'?'badge-error':'badge-processing';
+  const txt=j.status==='done'?'✅ Done':j.status==='error'?'❌ Error':'⟳ Processing...';
+  const promo=j.promo||{};
+  const promoHtml=promo.caption?`<div class="promo-preview">${promo.hook?'<strong style="color:var(--amber-light)">Hook: '+promo.hook+'</strong>\n\n':''}`+promo.caption+`</div>`:'';
+  const thumbHtml=j.thumbnail?`<img src="${j.thumbnail}" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:10px" alt="thumb">`:'';
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;color:#c5e8cc">${j.type||'Job'}</div>
+      <span class="job-badge ${cls}">${txt}</span>
+    </div>
+    <div style="font-size:10px;color:#2D6A4F88;margin-bottom:8px;font-family:monospace">ID: ${jobId}</div>
+    ${thumbHtml}${promoHtml}
+    ${j.status==='done'?`<div style="margin-top:12px"><button class="btn btn-go btn-sm" onclick="viewOutput('${jobId}')">View Output & Download →</button></div>`:''}
+  `;
+}
+
+async function pollJob(jobId){
+  try{
+    const d=await fetch('/api/job/'+jobId).then(r=>r.json());
+    if(d.status==='done'||d.status==='error'){
+      clearInterval(pollTimers[jobId]);delete pollTimers[jobId];
+      activeJobs[jobId]={...activeJobs[jobId],...d};
+      renderJobCard(jobId);updateJobBadge();
+      if(d.status==='done'){toast('✅ '+( activeJobs[jobId].type||'Job')+' complete!');loadFiles();}
+    }
+  }catch(_){}
+}
+
+function updateJobBadge(){
+  const n=Object.values(activeJobs).filter(j=>j.status==='processing').length;
+  const b=document.getElementById('jobBadge');
+  b.style.display=n>0?'inline':'none';if(n>0)b.textContent=n;
+}
+
+function viewOutput(jobId){
+  const j=activeJobs[jobId];if(!j)return;
+  showSubTab('output');renderOutput(j);
+}
+
+function renderOutput(j){
+  const oa=document.getElementById('outputArea');oa.innerHTML='';
+  const promo=j.promo||{};
+  const caption=j.caption||promo.caption||'';
+
+  // ── Thumbnail (video jobs) ──────────────────────────────────────
+  if(j.thumbnail){
+    const tc=document.createElement('div');tc.className='card';tc.style.padding='0';tc.style.overflow='hidden';
+    tc.innerHTML=`<img src="${j.thumbnail}" style="width:100%;max-height:220px;object-fit:cover;border-radius:inherit;display:block">`;
+    oa.appendChild(tc);
+  }
+
+  // ── Media variants ──────────────────────────────────────────────
+  if(j.results&&j.results.length){
+    const fc=document.createElement('div');fc.className='card';
+    fc.innerHTML=`<div class="card-title">✅ Branded Variants</div><div class="card-desc">Watermarked. Colour graded. Optimised per platform.</div>`;
+    j.results.forEach(r=>{
+      const ext=(r.filename||'').split('.').pop().toLowerCase();
+      const isAudio=['mp3','ogg','m4a','wav'].includes(ext);
+      const isVideo=ext==='mp4';
+      const isImg=['jpg','jpeg','png','gif','webp'].includes(ext);
+      const d=document.createElement('div');d.className='res-item';
+      let mediaHtml='';
+      if(isAudio) mediaHtml=`<audio controls src="${r.downloadUrl}" style="width:100%;margin:8px 0;border-radius:6px;accent-color:#F4A261"></audio>`;
+      if(isImg)   mediaHtml=`<img src="${r.downloadUrl}" style="width:100%;max-height:180px;object-fit:contain;border-radius:8px;margin:8px 0;background:#0d1a10">`;
+      if(isVideo) mediaHtml=`<video controls src="${r.downloadUrl}" style="width:100%;max-height:220px;border-radius:8px;margin:8px 0;background:#000" preload="metadata"></video>`;
+      const mixBtn = (isImg||isVideo) ? `<button class="dl" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="openMixModal('${(r.filename||'').replace(/'/g,\"\\\\'\")}', ${isVideo? (r.duration||0) : 0})">🎵 Add music</button>` : '';
+      d.innerHTML=`<div><div class="res-label">${r.label||r.platform||r.profile||'Output'}</div><div class="res-meta">${r.resolution||ext.toUpperCase()} ${r.duration?'· '+r.duration+'s':''}</div></div><div style="display:flex;gap:8px;align-items:center"><a class="dl" href="${r.downloadUrl}" download="${r.filename}">↓</a>${mixBtn}</div>`;
+      if(mediaHtml){
+        const mw=document.createElement('div');mw.style.cssText='padding:0 0 8px';mw.innerHTML=mediaHtml;
+        const wrapper=document.createElement('div');wrapper.appendChild(d);wrapper.appendChild(mw);fc.appendChild(wrapper);
+      } else fc.appendChild(d);
+    });
+    oa.appendChild(fc);
+  }
+
+  // ── Ready-to-Post button ───────────────────────────────────────
+  if(j.jobId&&j.status==='done'||j.status==='approved'){
+    const rb=document.createElement('div');rb.className='rtp-card';rb.id='rtpCard_'+j.jobId;
+    rb.innerHTML=`<div class="card-title">🚀 Ready-to-Post Overlay</div>
+      <div class="card-desc" style="color:#9fd3aa">Apply the full Lavira brand overlay — logo, title, hook, contacts — directly onto your output files.</div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-go btn-sm" style="flex:1" onclick="makeReadyToPost('${j.jobId}')">🏷 Build Post Package</button>
+        <button class="btn btn-sm" style="flex:1;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="copyCaption()">📋 Copy Caption Only</button>
+      </div>
+      <div id="rtpResults_${j.jobId}" class="rtp-list" style="margin-top:14px"></div>`;
+    oa.appendChild(rb);
+  }
+
+  // ── Direct Publishing ──────────────────────────────────────────
+  if(j.jobId&&j.status==='approved'){
+    const pb=document.createElement('div');pb.className='card';pb.style.borderColor='#F4A261';
+    pb.innerHTML=`<div class="card-title" style="color:#F4A261">📡 Direct Publishing</div>
+      <div class="card-desc">Connected social tokens → publish directly without manual upload.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn btn-sm" style="flex:1;background:#E1306C;border-color:#E1306C;color:#fff" onclick="publishToInstagram('${j.jobId}')">📸 Post to Instagram</button>
+        <button class="btn btn-sm" style="flex:1;background:#000;border-color:#000;color:#fff" onclick="publishToTikTok('${j.jobId}')">🎵 Post to TikTok</button>
+        <button class="btn btn-sm" style="flex:1;background:#1877F2;border-color:#1877F2;color:#fff" onclick="publishToFacebook('${j.jobId}')">f Post to Facebook</button>
+      </div>
+      <div id="pubStatus_${j.jobId}" style="margin-top:10px;font-size:11px;color:#4d7a55"></div>`;
+    oa.appendChild(pb);
+  }
+
+  // ── Promo Package ──────────────────────────────────────────────
+  if(caption){
+    const cc=document.createElement('div');cc.className='card';
+    const pkg=promo.relatedPackage;
+    const pkgHtml=pkg?`<div class="pkg-badge"><div class="pkg-name">📦 ${pkg.name}</div><div class="pkg-dur">${pkg.duration} · ${(pkg.highlights||[]).slice(0,3).join(', ')}</div></div>`:'';
+    const storyHtml=promo.storyCaption?`<div style="background:#0d1a1088;border:1px solid #2D6A4F44;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:11px;color:#9fd3aa">📱 Story copy: <em>${promo.storyCaption.slice(0,100)}…</em> <button onclick="navigator.clipboard.writeText(${JSON.stringify(promo.storyCaption)})" class="editor-btn" style="padding:2px 8px;font-size:10px;margin-left:6px">Copy</button></div>`:'';
+    cc.innerHTML=`<div class="card-title">✍️ Caption &amp; Promo Package</div><div class="card-desc">Edit freely — then copy to your post.</div>
+      ${promo.hook?`<div style="background:linear-gradient(135deg,#1B4332,#2D6A4F22);border:1px solid #2D6A4F44;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--amber-light);font-weight:700">🎯 ${promo.hook}</div>`:''}
+      <textarea class="caption-edit" id="cedit">${caption}</textarea>
+      ${promo.hashtags?`<div style="margin-top:10px;font-size:11px;color:#4d7a55;line-height:1.8">${Array.isArray(promo.hashtags)?promo.hashtags.join(' '):promo.hashtags}</div>`:''}
+      ${promo.ctaBlock?`<div style="margin-top:8px;font-size:12px;color:#4d7a55;white-space:pre-line">${promo.ctaBlock}</div>`:''}
+      ${pkgHtml}
+      ${storyHtml}
+      <div class="action-row" style="margin-top:14px">
+        <button class="btn btn-sm btn-go" onclick="copyCaption()">📋 Copy Caption</button>
+        <button class="btn btn-sm" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="saveCaption('${j.jobId}')">💾 Save Caption</button>
+        <button class="btn btn-sm btn-approve" onclick="approveJob('${j.jobId}')">✓ Approve</button>
+        <button class="btn btn-sm btn-reject" onclick="rejectJob('${j.jobId}')">✗ Reject</button>
+      </div>`;
+    oa.appendChild(cc);
+  }
+  if(!j.results&&!caption)oa.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>No output data found.</div>';
+}
+
+// ─── Add music modal (mix existing output) ────────────────────────────────────
+function openMixModal(mediaFilename, durationHint){
+  const existing=document.getElementById('mixModal');if(existing)existing.remove();
+  const m=document.createElement('div');
+  m.id='mixModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:1001;display:flex;align-items:center;justify-content:center;padding:18px';
+  const dur = (durationHint && durationHint>0) ? Math.round(durationHint) : 30;
+  m.innerHTML=`<div style="width:min(720px,96vw);background:#07140c;border:1px solid #2D6A4F44;border-radius:14px;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="font-weight:800;color:#F4A261">🎵 Add music</div>
+      <button class="btn btn-sm" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="document.getElementById('mixModal').remove()">✕ Close</button>
+    </div>
+    <div style="color:#4d7a55;font-size:11px;margin-top:6px">This will create a new MP4 in <code>outputs/</code> with audio length matched to the media.</div>
+    <div style="margin-top:12px">
+      <div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Target output</div>
+      <div style="font-family:monospace;font-size:11px;color:#9fd3aa">${mediaFilename}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div>
+        <div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Audio file</div>
+        <input id="mixAudio" type="file" accept="audio/*" class="inp">
+      </div>
+      <div>
+        <div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Duration (seconds)</div>
+        <input id="mixDur" type="number" min="1" max="600" value="${dur}" class="inp">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-go" onclick="submitMixExisting('${mediaFilename.replace(/'/g,\"\\\\'\")}')">Create mixed MP4</button>
+    </div>
+    <div id="mixStatus" style="margin-top:10px;font-size:11px;color:#4d7a55"></div>
+  </div>`;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+
+async function submitMixExisting(mediaFilename){
+  const st=document.getElementById('mixStatus');
+  const af=document.getElementById('mixAudio');
+  const dur=document.getElementById('mixDur');
+  if(!af||!af.files||!af.files[0]){toast('Choose an audio file');return;}
+  if(st) st.textContent='Mixing…';
+  try{
+    const fd=new FormData();
+    fd.append('audio', af.files[0]);
+    fd.append('mediaFilename', mediaFilename);
+    fd.append('durationSeconds', dur?.value||'');
+    const r=await fetch('/api/mix-existing',{method:'POST',body:fd}).then(r=>r.json());
+    if(r.error) throw new Error(r.error);
+    if(st) st.innerHTML=`✅ Created: <a href="${r.downloadUrl}" download="${r.filename}" style="color:#F4A261">${r.filename}</a>`;
+    toast('✅ Mixed MP4 created');
+    loadGallery();
+  }catch(e){
+    if(st) st.textContent='❌ '+e.message;
+    toast('Mix failed: '+e.message, 6000);
+  }
+}
+
+async function approveJob(jobId){
+  try{await fetch('/api/job/'+jobId+'/approve',{method:'POST'});toast('✅ Approved and logged!');}
+  catch(e){toast('Could not approve: '+e.message);}
+}
+async function rejectJob(jobId){
+  try{await fetch('/api/job/'+jobId+'/reject',{method:'POST'});toast('Job rejected — flagged for redo');}
+  catch(e){toast('Error: '+e.message);}
+}
+
+async function saveCaption(jobId){
+  const t=document.getElementById('cedit');if(!t){toast('Caption box not found');return;}
+  const caption=t.value||'';
+  if(!caption.trim()){toast('Caption cannot be empty');return;}
+  try{
+    const r=await fetch('/api/job/'+jobId+'/caption',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({caption})}).then(r=>r.json());
+    if(r.error) throw new Error(r.error);
+    toast('💾 Caption saved');
+  }catch(e){toast('Save failed: '+e.message);}
+}
+
+async function publishToInstagram(jobId){
+  const s=document.getElementById('pubStatus_'+jobId);if(s)s.innerHTML='📡 Publishing to Instagram…';
+  try{
+    const r=await fetch('/api/job/'+jobId+'/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platforms:['instagram']})}).then(r=>r.json());
+    if(s){
+      if(r.publishResults?.[0]?.status==='manual')s.innerHTML='Manual upload required: Add INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID to .env';
+      else if(r.publishResults?.[0]?.status==='stub')s.innerHTML='⚠️ Instagram API integration pending (token present)';
+      else s.innerHTML='✅ Posted to Instagram!';
+    }
+    toast('Instagram: '+r.publishResults?.[0]?.status);
+  }catch(e){
+    if(s)s.innerHTML='❌ Error: '+e.message;
+    toast('Publish error: '+e.message);
+  }
+}
+
+async function publishToTikTok(jobId){
+  const s=document.getElementById('pubStatus_'+jobId);if(s)s.innerHTML='📡 Publishing to TikTok…';
+  try{
+    const r=await fetch('/api/job/'+jobId+'/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platforms:['tiktok']})}).then(r=>r.json());
+    if(s){
+      if(r.publishResults?.[0]?.status==='manual')s.innerHTML='Manual upload: Set TIKTOK_ACCESS_TOKEN in .env';
+      else if(r.publishResults?.[0]?.status==='stub')s.innerHTML='⚠️ TikTok API integration pending (token present)';
+      else s.innerHTML='✅ Posted to TikTok!';
+    }
+    toast('TikTok: '+r.publishResults?.[0]?.status);
+  }catch(e){
+    if(s)s.innerHTML='❌ Error: '+e.message;
+    toast('Publish error: '+e.message);
+  }
+}
+
+async function publishToFacebook(jobId){
+  const s=document.getElementById('pubStatus_'+jobId);if(s)s.innerHTML='📡 Publishing to Facebook…';
+  try{
+    const r=await fetch('/api/job/'+jobId+'/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platforms:['facebook']})}).then(r=>r.json());
+    if(s){
+      if(r.publishResults?.[0]?.status==='manual')s.innerHTML='Manual setup: Set FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID in .env';
+      else if(r.publishResults?.[0]?.status==='stub')s.innerHTML='⚠️ Facebook API integration pending (token present)';
+      else s.innerHTML='✅ Posted to Facebook!';
+    }
+    toast('Facebook: '+r.publishResults?.[0]?.status);
+  }catch(e){
+    if(s)s.innerHTML='❌ Error: '+e.message;
+    toast('Publish error: '+e.message);
+  }
+}
+
+function copyCaption(){
+  const t=document.getElementById('cedit');if(!t)return;
+  navigator.clipboard.writeText(t.value).then(()=>toast('Caption copied!')).catch(()=>{t.select();document.execCommand('copy');toast('Copied!');});
+}
+
+// ─── Admin modal (minimal v1) ─────────────────────────────────────────────────
+async function openAdmin(){
+  const existing=document.getElementById('adminModal');if(existing)existing.remove();
+  const m=document.createElement('div');
+  m.id='adminModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px';
+  m.innerHTML=`<div style="width:min(820px,96vw);max-height:88vh;overflow:auto;background:#07140c;border:1px solid #2D6A4F44;border-radius:14px;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div style="font-weight:800;color:#F4A261">⚙ Admin Settings</div>
+      <button class="btn btn-sm" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="document.getElementById('adminModal').remove()">✕ Close</button>
+    </div>
+    <div style="color:#4d7a55;font-size:11px;margin-top:6px">These settings are persisted server-side and used by workflows.</div>
+    <div id="adminBody" style="margin-top:14px"></div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-go" onclick="saveAdminSettings()">💾 Save Settings</button>
+      <button class="btn btn-sm" style="background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa" onclick="loadAdminSettings()">↻ Reload</button>
+    </div>
+  </div>`;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+  await loadAdminSettings();
+}
+
+async function loadAdminSettings(){
+  const body=document.getElementById('adminBody');if(!body)return;
+  body.innerHTML='<div style="color:#4d7a55;font-size:12px">Loading…</div>';
+  try{
+    const s=await fetch('/api/admin/settings').then(r=>r.json());
+    body.innerHTML=`
+      <div class="card" style="margin:0;border-color:#2D6A4F44">
+        <div class="card-title">Brand</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Title</div><input id="as_title" class="inp" value="${(s.brand?.title||'').replace(/\"/g,'&quot;')}"></div>
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Tagline</div><input id="as_tagline" class="inp" value="${(s.brand?.tagline||'').replace(/\"/g,'&quot;')}"></div>
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Phone</div><input id="as_phone" class="inp" value="${(s.brand?.phone||'').replace(/\"/g,'&quot;')}"></div>
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Instagram</div><input id="as_ig" class="inp" value="${(s.brand?.instagramHandle||'').replace(/\"/g,'&quot;')}"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:10px;border-color:#2D6A4F44">
+        <div class="card-title">Workflow</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Default media type</div>
+            <select id="as_media" class="inp">
+              ${['image','video'].map(v=>`<option value="${v}" ${s.workflow?.defaultMediaType===v?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div><div style="font-size:11px;color:#4d7a55;margin-bottom:6px">Approval required</div>
+            <select id="as_approval" class="inp">
+              <option value="true" ${s.workflow?.approvalRequired?'selected':''}>true</option>
+              <option value="false" ${s.workflow?.approvalRequired?'':'selected'}>false</option>
+            </select>
+          </div>
+        </div>
+      </div>`;
+  }catch(e){
+    body.innerHTML='<div style="color:#f08080;font-size:12px">Failed to load settings: '+e.message+'</div>';
+  }
+}
+
+async function saveAdminSettings(){
+  const patch={
+    brand:{
+      title:document.getElementById('as_title')?.value||'',
+      tagline:document.getElementById('as_tagline')?.value||'',
+      phone:document.getElementById('as_phone')?.value||'',
+      instagramHandle:document.getElementById('as_ig')?.value||'',
+    },
+    workflow:{
+      defaultMediaType:document.getElementById('as_media')?.value||'image',
+      approvalRequired:(document.getElementById('as_approval')?.value||'true')==='true'
+    }
+  };
+  try{
+    const r=await fetch('/api/admin/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}).then(r=>r.json());
+    if(r.error) throw new Error(r.error);
+    toast('✅ Settings saved');
+  }catch(e){toast('Save settings failed: '+e.message);}
+}
+
+// ─── GIF SEARCH ───────────────────────────────────────────────
+let gifOffset = 0;
+const GIF_PAGE_SIZE = 12;
+
+async function searchGif(reset = true){
+  const q=document.getElementById('gifQ').value.trim();
+  if(!q){toast('Enter a search term');return;}
+  if(reset) gifOffset = 0;
+  const grid=document.getElementById('gifGrid');
+  grid.innerHTML='<div class="empty"><div class="empty-icon">🔍</div>Searching GIPHY...</div>';
+  try{
+    const d=await fetch('/api/intake/giphy/search?q='+encodeURIComponent(q)+'&limit='+GIF_PAGE_SIZE+'&offset='+gifOffset).then(r=>r.json());
+    grid.innerHTML='';selectedGif=null;
+    document.getElementById('gifUseRow').style.display='none';
+    if(!d.results||!d.results.length){grid.innerHTML='<div class="empty"><div class="empty-icon">😕</div>No results. Try a different search.</div>';return;}
+    d.results.forEach(g=>{
+      const d2=document.createElement('div');d2.className='gif-item';
+      d2.innerHTML=`<img src="${g.preview||g.url}" alt="${g.title}" loading="lazy"><div class="gif-label">${g.title}</div>`;
+      d2.onclick=()=>{
+        document.querySelectorAll('.gif-item').forEach(x=>x.classList.remove('selected'));
+        d2.classList.add('selected');selectedGif=g;
+        document.getElementById('gifUseRow').style.display='block';
+      };
+      grid.appendChild(d2);
+    });
+  }catch(e){grid.innerHTML='<div class="empty"><div class="empty-icon">🔑</div>GIPHY unavailable — add GIPHY_API_KEY to .env</div>';}
+}
+
+function gifNextPage(){
+  gifOffset += GIF_PAGE_SIZE;
+  searchGif(false);
+}
+
+function gifPrevPage(){
+  gifOffset = Math.max(0, gifOffset - GIF_PAGE_SIZE);
+  searchGif(false);
+}
+
+// ─── HISTORY & FILES ──────────────────────────────────────────
+async function loadHistory(){
+  try{
+    const jobs=await fetch('/api/recent').then(r=>r.json());
+    const hl=document.getElementById('histList');
+    if(!jobs||!jobs.length){hl.innerHTML='<div class="empty"><div class="empty-icon">📋</div>No history yet.</div>';return;}
+    hl.innerHTML='';
+    jobs.slice(0,20).forEach(j=>{
+      const d=document.createElement('div');d.className='hist-item';
+      const dt=new Date(j.created||j.created_at||Date.now()).toLocaleString();
+      d.innerHTML=`<span style="display:flex;align-items:center;gap:6px">${j.media_type||j.mediaType||'job'}<span class="badge-sm">${j.destination||''}</span><span class="badge-sm">${j.status||''}</span></span><span style="color:#2D6A4F66;font-size:10px">${dt}</span>`;
+      hl.appendChild(d);
+    });
+  }catch(e){document.getElementById('histList').innerHTML='<div class="empty">History unavailable</div>';}
+}
+
+async function loadFiles(){
+  try{
+    const files=await fetch('/api/files').then(r=>r.json());
+    const fl=document.getElementById('filesList');
+    if(!files||!files.length){fl.innerHTML='<div class="empty"><div class="empty-icon">📂</div>No output files yet.</div>';return;}
+    fl.innerHTML='';
+    files.slice(0,20).forEach(f=>{
+      const d=document.createElement('div');d.className='hist-item';
+      const mb=(f.size/1048576).toFixed(1);
+      d.innerHTML=`<span>${f.filename}<span class="badge-sm">${mb} MB</span></span><a class="dl" style="padding:5px 12px;font-size:10px" href="${f.url}" download="${f.filename}">↓</a>`;
+      fl.appendChild(d);
+    });
+  }catch(_){}
+}
+
+async function loadSchedule(){
+  try{
+    const s=await fetch('/api/schedule').then(r=>r.json());
+    const sl=document.getElementById('schedList');if(!sl)return;
+    if(!s.entries||!s.entries.length){sl.innerHTML='<div class="empty"><div class="empty-icon">⏰</div>No scheduled entries yet — server generates one on startup.</div>';return;}
+    sl.innerHTML='';
+    s.entries.slice(0,5).forEach(e=>{
+      const d=document.createElement('div');d.className='hist-item';
+      d.innerHTML=`<span><strong style="color:var(--amber-light)">${e.destination}</strong><span class="badge-sm">${e.date}</span><span class="badge-sm">${e.status}</span></span><button class="btn btn-sm btn-outline" style="padding:4px 10px;font-size:10px" onclick="approveSchedule('${e.id}')">Approve</button>`;
+      sl.appendChild(d);
+    });
+  }catch(_){}
+}
+
+// Ensure Today’s Promo loads when History is viewed
+const _origShowTab = typeof showTab === 'function' ? showTab : null;
+
+async function approveSchedule(id){
+  try{await fetch('/api/schedule/'+id+'/approve',{method:'POST'});toast('Schedule entry approved!');loadSchedule();}
+  catch(e){toast('Error: '+e.message);}
+}
+
+// ─── FUNNEL (removed) ─────────────────────────────────────────
+
+// ─── TOAST ────────────────────────────────────────────────────
+function toast(msg,dur=3200){
+  const t=document.getElementById('toast');
+  t.innerHTML=msg;t.classList.add('show');
+  // Add haptic feedback simulation
+  if(navigator.vibrate)navigator.vibrate(50);
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// ─── LOADING STATE HELPER ──────────────────────────────────────
+function setButtonLoading(btnId,loading=true,text=''){
+  const btn=document.getElementById(btnId);
+  if(!btn)return;
+  if(loading){
+    btn.disabled=true;
+    btn.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><div class="spinner"></div>${text||'Processing...'}</div>`;
+  }else{
+    btn.disabled=false;
+    btn.innerHTML=text||btn.getAttribute('data-original-text')||'Process';
+  }
+}
+
+
+
+// ─── CANVAS CROP TOOL ─────────────────────────────────────────────────────────
+let cropActive=false, cropDragging=false, cropStart={x:0,y:0}, cropEnd={x:0,y:0};
+let cropImgNaturalW=0, cropImgNaturalH=0, cropCanvasScale=1;
+
+function initCropCanvas(imgSrc){
+  const wrap=document.getElementById('cropWrap');
+  const canvas=document.getElementById('cropCanvas');
+  const ctx=canvas.getContext('2d');
+  const img=new Image();
+  img.onload=()=>{
+    cropImgNaturalW=img.naturalWidth; cropImgNaturalH=img.naturalHeight;
+    // Fit to container (max 560px wide)
+    const maxW=Math.min(560,window.innerWidth-60);
+    cropCanvasScale=maxW/img.naturalWidth;
+    canvas.width=Math.round(img.naturalWidth*cropCanvasScale);
+    canvas.height=Math.round(img.naturalHeight*cropCanvasScale);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    wrap.classList.add('active');
+    clearCrop();
+  };
+  img.src=imgSrc;
+}
+
+function toggleCrop(){
+  if(!pFile){toast('Upload a photo first');return;}
+  cropActive=!cropActive;
+  const btn=document.getElementById('cropToggleBtn');
+  if(cropActive){
+    btn.textContent='✂ Crop Active — drag on image';
+    btn.style.borderColor='#F4A261'; btn.style.color='#F4A261';
+    document.getElementById('cropHint').textContent='Drag to select crop region';
+    // Use existing preview
+    const prevImg=document.getElementById('ppreview');
+    if(prevImg&&prevImg.src) initCropCanvas(prevImg.src);
+    else{ const url=URL.createObjectURL(pFile); initCropCanvas(url); }
+  } else {
+    btn.textContent='✂ Enable Crop'; btn.style.borderColor=''; btn.style.color='';
+    document.getElementById('cropHint').textContent='';
+    document.getElementById('cropWrap').classList.remove('active');
+    clearCrop();
+  }
+}
+
+(function setupCropEvents(){
+  document.addEventListener('DOMContentLoaded',()=>{
+    const canvas=document.getElementById('cropCanvas');
+    if(!canvas)return;
+    function getXY(e){
+      const r=canvas.getBoundingClientRect();
+      const src=e.touches?e.touches[0]:e;
+      return{x:Math.max(0,Math.min(canvas.width,src.clientX-r.left)),
+             y:Math.max(0,Math.min(canvas.height,src.clientY-r.top))};
+    }
+    function down(e){if(!cropActive)return;e.preventDefault();cropDragging=true;cropStart=getXY(e);cropEnd={...cropStart};updateCropSel();}
+    function move(e){if(!cropDragging)return;e.preventDefault();cropEnd=getXY(e);updateCropSel();}
+    function up(){if(!cropDragging)return;cropDragging=false;finalizeCropSel();}
+    canvas.addEventListener('mousedown',down);
+    canvas.addEventListener('mousemove',move);
+    canvas.addEventListener('mouseup',up);
+    canvas.addEventListener('touchstart',down,{passive:false});
+    canvas.addEventListener('touchmove',move,{passive:false});
+    canvas.addEventListener('touchend',up);
+  });
+})();
+
+function updateCropSel(){
+  const sel=document.getElementById('cropSel');
+  const canvas=document.getElementById('cropCanvas');
+  if(!sel||!canvas)return;
+  const x=Math.min(cropStart.x,cropEnd.x), y=Math.min(cropStart.y,cropEnd.y);
+  const w=Math.abs(cropEnd.x-cropStart.x), h=Math.abs(cropEnd.y-cropStart.y);
+  if(w<5||h<5){sel.style.display='none';return;}
+  sel.style.cssText=`display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px;position:absolute;border:2px solid #F4A261;box-shadow:0 0 0 9999px rgba(0,0,0,0.55);pointer-events:none`;
+  // Show pixel coords (mapped back to original image dimensions)
+  const px=Math.round(x/cropCanvasScale), py=Math.round(y/cropCanvasScale);
+  const pw=Math.round(w/cropCanvasScale), ph=Math.round(h/cropCanvasScale);
+  const cc=document.getElementById('cropCoords');
+  if(cc)cc.textContent=`${px},${py} → ${pw}×${ph}px`;
+}
+
+function finalizeCropSel(){
+  const x=Math.min(cropStart.x,cropEnd.x), y=Math.min(cropStart.y,cropEnd.y);
+  const w=Math.abs(cropEnd.x-cropStart.x), h=Math.abs(cropEnd.y-cropStart.y);
+  if(w>5&&h>5) document.getElementById('cropActions').style.display='flex';
+}
+
+function applyCrop(){
+  const x=Math.min(cropStart.x,cropEnd.x), y=Math.min(cropStart.y,cropEnd.y);
+  const w=Math.abs(cropEnd.x-cropStart.x), h=Math.abs(cropEnd.y-cropStart.y);
+  if(w<5||h<5){toast('Draw a crop region first');return;}
+  // Map canvas pixels → original image pixels
+  imgEdits.crop={
+    x:Math.round(x/cropCanvasScale),
+    y:Math.round(y/cropCanvasScale),
+    width:Math.round(w/cropCanvasScale),
+    height:Math.round(h/cropCanvasScale)
+  };
+  const cc=document.getElementById('cropCoords');
+  if(cc)cc.textContent=`✓ Crop set: ${imgEdits.crop.width}×${imgEdits.crop.height}px`;
+  toast(`✂ Crop applied: ${imgEdits.crop.width}×${imgEdits.crop.height}px — will process on submit`);
+  document.getElementById('cropActions').style.display='flex';
+}
+
+function clearCrop(){
+  imgEdits.crop=null;
+  cropStart={x:0,y:0}; cropEnd={x:0,y:0};
+  const sel=document.getElementById('cropSel'); if(sel)sel.style.display='none';
+  const act=document.getElementById('cropActions'); if(act)act.style.display='none';
+  const cc=document.getElementById('cropCoords'); if(cc)cc.textContent='';
+}
+
+// ─── GALLERY / MEDIA LIBRARY ──────────────────────────────────────────────────
+let allGalleryFiles=[], galCurrentFilter='all';
+
+async function loadGallery(){
+  const grid=document.getElementById('galGrid');
+  if(!grid)return;
+  grid.innerHTML='<div class="empty"><div class="empty-icon">⏳</div>Loading files...</div>';
+  try{
+    const files=await fetch('/api/files').then(r=>r.json());
+    allGalleryFiles=files;
+    renderGallery(files);
+  }catch(e){grid.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div>Could not load files</div>';}
+}
+
+function renderGallery(files){
+  const grid=document.getElementById('galGrid');
+  if(!grid)return;
+  if(!files.length){grid.innerHTML='<div class="empty"><div class="empty-icon">🖼️</div>No files yet — process some media first</div>';return;}
+  grid.innerHTML='';
+  files.forEach(f=>{
+    const ext=f.filename.split('.').pop().toLowerCase();
+    const isImg=['jpg','jpeg','png','gif','webp'].includes(ext);
+    const isVid=ext==='mp4';
+    const isAudio=['mp3','ogg'].includes(ext);
+    const isPostReady=f.filename.startsWith('lavira_post_');
+    const mb=(f.size/1024/1024).toFixed(1);
+    const el=document.createElement('div'); el.className='gal-item';
+    let thumbHtml='';
+    if(isImg)         thumbHtml=`<img class="gal-thumb" src="${f.url}" loading="lazy" alt="${f.filename}">`;
+    else if(isVid)    thumbHtml=`<div class="gal-video-thumb">🎬</div>`;
+    else if(isAudio)  thumbHtml=`<div class="gal-video-thumb" style="font-size:28px;flex-direction:column;gap:4px"><span>🎵</span><audio controls src="${f.url}" style="width:140px;margin-top:4px" preload="none"></audio></div>`;
+    else              thumbHtml=`<div class="gal-video-thumb" style="font-size:28px">📄</div>`;
+    el.innerHTML=`${thumbHtml}
+      ${isPostReady?'<span class="gal-badge">POST-READY</span>':''}
+      <a class="gal-dl" href="${f.url}" download="${f.filename}">↓</a>
+      <div class="gal-meta"><div class="gal-name">${f.filename}</div><div class="gal-size">${mb} MB</div></div>`;
+    if(isVid)el.onclick=(e)=>{if(e.target.tagName==='A')return;openVideoModal(f.url,f.filename);};
+    if(isImg)el.onclick=(e)=>{if(e.target.tagName==='A')return;openImgModal(f.url,f.filename);};
+    grid.appendChild(el);
+  });
+}
+
+function filterGallery(type,chipEl){
+  galCurrentFilter=type;
+  document.querySelectorAll('.gal-chip').forEach(c=>c.classList.remove('active'));
+  chipEl.classList.add('active');
+  let filtered=allGalleryFiles;
+  if(type==='image') filtered=allGalleryFiles.filter(f=>/\.(jpg|jpeg|png|gif|webp)$/i.test(f.filename));
+  else if(type==='video') filtered=allGalleryFiles.filter(f=>/\.mp4$/i.test(f.filename));
+  else if(type==='audio') filtered=allGalleryFiles.filter(f=>/\.(mp3|ogg)$/i.test(f.filename));
+  else if(type==='post_ready') filtered=allGalleryFiles.filter(f=>f.filename.startsWith('lavira_post_'));
+  renderGallery(filtered);
+}
+
+function openVideoModal(url,name){
+  const existing=document.getElementById('mediaModal');if(existing)existing.remove();
+  const m=document.createElement('div');
+  m.id='mediaModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:20px';
+  m.innerHTML=`<video controls autoplay src="${url}" style="max-width:min(800px,90vw);max-height:80vh;border-radius:12px"></video>
+    <div style="color:#9fd3aa;font-size:12px">${name}</div>
+    <div style="display:flex;gap:10px"><a href="${url}" download="${name}" class="btn btn-sm btn-go" style="padding:8px 20px">↓ Download</a><button onclick="document.getElementById('mediaModal').remove()" class="btn btn-sm" style="padding:8px 20px;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa">✕ Close</button></div>`;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+function openImgModal(url,name){
+  const existing=document.getElementById('mediaModal');if(existing)existing.remove();
+  const m=document.createElement('div');
+  m.id='mediaModal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:20px;cursor:pointer';
+  m.innerHTML=`<img src="${url}" style="max-width:min(900px,90vw);max-height:80vh;border-radius:12px;object-fit:contain">
+    <div style="color:#9fd3aa;font-size:12px">${name}</div>
+    <div style="display:flex;gap:10px"><a href="${url}" download="${name}" class="btn btn-sm btn-go" style="padding:8px 20px">↓ Download</a><button onclick="document.getElementById('mediaModal').remove()" class="btn btn-sm" style="padding:8px 20px;background:#1a3326;border-color:#2D6A4F44;color:#9fd3aa">✕ Close</button></div>`;
+  m.onclick=e=>{if(e.target===m)m.remove();};
+  document.body.appendChild(m);
+}
+
+async function cleanupOldFiles(){
+  if(!confirm('Delete output files older than 7 days? This cannot be undone.'))return;
+  try{
+    const r=await fetch('/api/cleanup',{method:'POST'}).then(r=>r.json());
+    toast(`🗑 Cleaned ${r.deleted||0} old files`);
+    loadGallery();
+  }catch(e){toast('Cleanup error: '+e.message);}
+}
+
+// ─── ENHANCED SCHEDULE ────────────────────────────────────────────────────────
+async function loadSchedule(){
+  const sl=document.getElementById('schedList');if(!sl)return;
+  sl.innerHTML='<div style="color:#4d7a55;font-size:12px;padding:8px 0">Loading...</div>';
+  try{
+    const s=await fetch('/api/schedule').then(r=>r.json());
+    if(!s.entries||!s.entries.length){
+      sl.innerHTML='<div class="empty"><div class="empty-icon">⏰</div>No entries yet. Click "Generate Now" to create today\'s promo.</div>';
+      return;
+    }
+    sl.innerHTML='';
+    s.entries.slice(0,7).forEach(e=>{
+      const promo=e.promo||{};
+      const hook=promo.hook||promo.storyCaption||'';
+      const cap=promo.caption||'';
+      const pkg=promo.relatedPackage;
+      const statusColor=e.status==='approved'?'#52c78a':e.status==='posted'?'#F4A261':'#6a9470';
+      const el=document.createElement('div');el.className='sched-entry';
+      el.innerHTML=`
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div class="sched-dest">📍 ${e.destination}</div>
+          <span style="color:${statusColor};font-size:10px;font-weight:700;text-transform:uppercase">${e.status}</span>
+        </div>
+        <div style="font-size:10px;color:#4d7a55;margin-bottom:6px">${e.date}</div>
+        ${hook?`<div class="sched-hook">"${hook}"</div>`:''}
+        ${cap?`<div class="sched-caption" id="schedcap_${e.id}">${cap}</div>
+          <button onclick="document.getElementById('schedcap_${e.id}').classList.toggle('expanded')" style="background:none;border:none;color:#4d7a55;font-size:10px;cursor:pointer;padding:2px 0">▼ Read more</button>`:'' }
+        ${pkg?`<div style="font-size:10px;color:#F4A261;margin:6px 0">📦 ${pkg.name} (${pkg.duration})</div>`:''}
+        <div class="sched-actions">
+          ${e.status!=='approved'&&e.status!=='posted'?`<button class="editor-btn" onclick="approveSchedule('${e.id}')" style="border-color:#52c78a44;color:#52c78a">✓ Approve</button>`:''}
+          <button class="editor-btn" onclick="copyScheduleCaption('${e.id}',\`${cap.replace(/`/g,"'")}\`)">📋 Copy</button>
+        </div>`;
+      sl.appendChild(el);
+    });
+  }catch(e){sl.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div>${e.message}</div>`;}
+}
+
+function copyScheduleCaption(id,cap){
+  navigator.clipboard.writeText(cap).then(()=>toast('Caption copied!')).catch(()=>toast('Copy failed'));
+}
+
+async function triggerDailyPromo(){
+  const btn=event.target;btn.disabled=true;btn.textContent='Generating…';
+  try{
+    const r=await fetch('/api/schedule/generate',{method:'POST'}).then(r=>r.json());
+    if(r.success){toast('✅ Daily promo generated!');loadSchedule();loadTodayPromo();}
+    else toast('Error: '+(r.error||'unknown'));
+  }catch(e){toast('Error: '+e.message);}
+  btn.disabled=false;btn.textContent='⚡ Generate Now';
+}
+
+// ─── One-click workflow: Today’s Post ─────────────────────────────────────────
+async function createTodaysPost(){
+  try{
+    toast('⚡ Creating today’s post…', 3500);
+    const r=await fetch('/api/workflow/today',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    toast('✅ Today’s post created!');
+    // Pull the saved job state so Output panel renders consistently
+    try{
+      const s=await fetch('/api/job/'+d.jobId).then(r=>r.json());
+      activeJobs[d.jobId]=s;
+      showSubTab('output');renderOutput(s);
+      loadGallery();
+      loadHistory();
+    }catch(_){
+      // fallback: show what we have
+      showSubTab('output');
+      renderOutput({ jobId:d.jobId, status:'done', destination:d.destination, promo:d.promo, results:d.results||[] });
+    }
+  }catch(e){toast('Workflow error: '+e.message, 6000);}
+}
+
+// ─── TODAY'S PROMO DASHBOARD ─────────────────────────────────────────────────
+async function loadTodayPromo(){
+  const card=document.getElementById('todayPromoCard');
+  const content=document.getElementById('todayPromoContent');
+  try{
+    const s=await fetch('/api/schedule').then(r=>r.json());
+    if(!s.entries||!s.entries.length){
+      card.style.display='none';
+      return;
+    }
+    // Find today's entry (most recent)
+    const today=s.entries[0];
+    const promo=today.promo||{};
+    const hook=promo.hook||promo.storyCaption||'';
+    const cap=promo.caption||'';
+    const pkg=promo.relatedPackage;
+
+    content.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="font-size:14px;font-weight:700;color:#F4A261">📍 ${today.destination}</div>
+        <span style="color:#6a9470;font-size:10px;font-weight:700;text-transform:uppercase">${today.status}</span>
+      </div>
+      <div style="font-size:10px;color:#4d7a55;margin-bottom:8px">${today.date}</div>
+      ${hook?`<div style="font-size:12px;color:#9fd3aa;font-style:italic;margin-bottom:8px">"${hook}"</div>`:''}
+      ${cap?`<div style="font-size:11px;color:#6a9470;margin-bottom:8px;line-height:1.5;max-height:60px;overflow:hidden">${cap}</div>`:''}
+      ${pkg?`<div style="font-size:10px;color:#F4A261;margin:6px 0">📦 ${pkg.name} (${pkg.duration})</div>`:''}
+    `;
+    card.style.display='block';
+  }catch(e){
+    card.style.display='none';
+  }
+}
+
+async function approveTodayPromo(){
+  try{
+    const s=await fetch('/api/schedule').then(r=>r.json());
+    if(!s.entries||!s.entries.length){toast('No promo to approve');return;}
+    const today=s.entries[0];
+    if(today.status==='approved'){toast('Already approved!');return;}
+    await fetch('/api/schedule/'+today.id+'/approve',{method:'POST'});
+    toast('✅ Today\'s promo approved!');
+    loadTodayPromo();
+  }catch(e){toast('Error: '+e.message);}
+}
+
+// ─── API Status Banner ────────────────────────────────────────────────────────
+async function loadAPIStatus(){
+  try{
+    const d=await fetch('/api/status').then(r=>r.json());
+    const banner=document.getElementById('apiBanner');
+    banner.style.display='flex';
+    Object.entries(d).forEach(([k,v])=>{
+      const pill=document.getElementById('pill-'+k);
+      if(!pill)return;
+      pill.className='api-pill '+(v.ok?'ok':'fail');
+      if(!v.ok)pill.title='Click to see setup instructions';
+    });
+  }catch(e){}
+}
+function showSetup(key){
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    const v=d[key];if(!v)return;
+    if(v.ok){toast('✓ '+v.label+' connected');return;}
+    toast('⚠️ '+v.label+': '+v.setup, 6000);
+  }).catch(()=>{});
+}
+
+// ─── Manual Image Editor ─────────────────────────────────────────────────────
+imgEdits={brightness:null,contrast:null,saturation:null,hue:null,rotate:0,flipH:false,flipV:false,sharpen:false};
+
+function toggleEditor(btn){
+  const p=document.getElementById('imgEditor');
+  const open=p.classList.toggle('open');
+  btn.textContent=open?'▲ Hide Adjustments':'✂ Manual Adjustments';
+}
+function updateSlider(key,val,labelId,decimals,suffix=''){
+  imgEdits[key]=val;
+  const el=document.getElementById(labelId);
+  if(el)el.textContent=parseFloat(val).toFixed(decimals)+(suffix||'');
+}
+function setRotate(deg){
+  imgEdits.rotate=deg;
+  ['rot0','rot90','rot180','rot270'].forEach(id=>{
+    const b=document.getElementById(id);if(b)b.classList.remove('active');
+  });
+  const active=document.getElementById('rot'+deg);if(active)active.classList.add('active');
+}
+function toggleFlip(dir){
+  const id='flip'+dir;
+  if(dir==='H'){imgEdits.flipH=!imgEdits.flipH;document.getElementById(id).classList.toggle('active',imgEdits.flipH);}
+  else{imgEdits.flipV=!imgEdits.flipV;document.getElementById(id).classList.toggle('active',imgEdits.flipV);}
+}
+function resetEdits(){
+  imgEdits={brightness:null,contrast:null,saturation:null,hue:null,rotate:0,flipH:false,flipV:false,sharpen:false};
+  ['ebrightness','econtrast','esaturation'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=100;});
+  const h=document.getElementById('ehue');if(h)h.value=0;
+  ['bval','cval','sval'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent='1.0';});
+  const hv=document.getElementById('hval');if(hv)hv.textContent='0°';
+  setRotate(0);imgEdits.flipH=false;imgEdits.flipV=false;
+  document.getElementById('flipH')?.classList.remove('active');
+  document.getElementById('flipV')?.classList.remove('active');
+  document.getElementById('esharpen').checked=false;
+  toast('Editor reset');
+}
+function buildEdits(){
+  const e={...imgEdits};
+  if(document.getElementById('esharpen')?.checked)e.sharpen=true;
+  // Only include changed values to avoid unnecessary processing
+  const out={};
+  if(e.brightness!=null&&e.brightness!==1)out.brightness=e.brightness;
+  if(e.contrast!=null&&e.contrast!==1)out.contrast=e.contrast;
+  if(e.saturation!=null&&e.saturation!==1)out.saturation=e.saturation;
+  if(e.hue&&e.hue!==0)out.hue=e.hue;
+  if(e.rotate&&e.rotate!==0)out.rotate=e.rotate;
+  if(e.flipH)out.flipH=true;
+  if(e.flipV)out.flipV=true;
+  if(e.sharpen)out.sharpen=true;
+  return Object.keys(out).length?out:null;
+}
+
+// ─── Override photo submit to include manual edits ───────────────────────────
+const _origSubmitPhoto = typeof submitPhoto === 'function' ? submitPhoto : null;
+function submitPhoto(){
+  const f=pFile;
+  if(!f){toast('Upload a photo first');return;}
+  const selProfiles=Array.from(document.querySelectorAll('.plat-check.photo-check:checked')).map(c=>c.value);
+  const profiles=selProfiles.length?selProfiles:['instagram_post','instagram_story','twitter_card'];
+  const edits=buildEdits();
+  const watermark=document.getElementById('ewatermark')?.checked!==false;
+  const brandTint=document.getElementById('ebrandtint')?.checked===true;
+  const fd=new FormData();
+  fd.append('photo',f);
+  fd.append('profiles',JSON.stringify(profiles));
+  fd.append('fit',document.getElementById('pfit')?.value||'contain');
+  if(edits)fd.append('edits',JSON.stringify(edits));
+  fd.append('watermark',watermark);
+  fd.append('brandTint',brandTint);
+  const dest=document.getElementById('destSel')?.value||'';
+  if(dest)fd.append('destination',dest);
+  const pb=document.getElementById('pBtn');pb.disabled=true;pb.textContent='Processing…';
+  const prog=document.getElementById('pprog');if(prog)prog.style.display='block';
+  fetch('/api/intake/photo',{method:'POST',body:fd})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error){toast('Error: '+d.error);pb.disabled=false;pb.textContent='Process Photo';return;}
+      activeJobs[d.jobId]=d;
+      showSubTab('output');renderOutput(d);
+      toast('✅ Photo processed!');
+    })
+    .catch(e=>{toast('Error: '+e.message);})
+    .finally(()=>{pb.disabled=false;pb.textContent='Process Photo';if(prog)prog.style.display='none';});
+}
+
+// ─── Ready-to-Post builder ────────────────────────────────────────────────────
+async function makeReadyToPost(jobId){
+  const btn=event.target;btn.disabled=true;btn.textContent='Building…';
+  const promo=(activeJobs[jobId]||{}).promo||{};
+  const body={promoType:promo.relatedPackage?.name||'',hook:promo.hook||''};
+  try{
+    const r=await fetch('/api/job/'+jobId+'/make-ready',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    const list=document.getElementById('rtpResults_'+jobId);
+    if(!list){btn.disabled=false;btn.textContent='🏷 Build Post Package';return;}
+    list.innerHTML='';
+    if(d.postReady&&d.postReady.length){
+      d.postReady.forEach(p=>{
+        if(p.error){list.innerHTML+=`<div style="color:#f08080;font-size:11px">⚠️ ${p.sourceFile}: ${p.error}</div>`;return;}
+        const ext=p.filename.split('.').pop().toLowerCase();
+        const isImg=['jpg','jpeg','png'].includes(ext);
+        const isVid=ext==='mp4';
+        list.innerHTML+=`<div class="rtp-item">
+          <div>
+            <div style="font-weight:600;color:#9fd3aa">${p.platform||'Post'} — Ready to Share</div>
+            <div style="font-size:10px;color:#4d7a55">${p.filename}</div>
+          </div>
+          <a class="dl" href="${p.downloadUrl}" download="${p.filename}" style="background:var(--grad-amber);color:var(--dark);padding:6px 14px;border-radius:7px;font-weight:700;font-size:12px">↓ Download</a>
+        </div>`;
+        if(isImg)list.innerHTML+=`<img src="${p.downloadUrl}" style="width:100%;border-radius:8px;margin:6px 0">`;
+        if(isVid)list.innerHTML+=`<video controls src="${p.downloadUrl}" style="width:100%;border-radius:8px;margin:6px 0"></video>`;
+      });
+      toast('🚀 '+d.postReady.length+' ready-to-post files built!');
+    }
+  }catch(e){toast('Error: '+e.message);}
+  btn.disabled=false;btn.textContent='🏷 Build Post Package';
+}
+
+
+// ─── BOOT ─────────────────────────────────────────────────────
+init();
+loadAPIStatus();
+</script>
+</body>
+</html>

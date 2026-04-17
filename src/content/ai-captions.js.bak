@@ -1,0 +1,146 @@
+// ai-captions.js — Claude-powered contextual promo package generator
+'use strict';
+const Anthropic = require('@anthropic-ai/sdk');
+const BRAND     = require('../orchestrator/brand');
+const cfg       = require('../config');
+const FALLBACK  = require('./captions');
+
+// ── Safe hashtag helper (handles both array and structured-object brand.hashtags) ──
+function getHashtags(count = 8) {
+  const h = BRAND.hashtags;
+  if (Array.isArray(h)) return h.slice(0, count);
+  if (typeof h.all === 'function') return h.all().slice(0, count);
+  // Flatten the object values
+  return Object.values(h)
+    .filter(v => Array.isArray(v))
+    .flat()
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, count);
+}
+
+// ── Destination context helper ──
+function destContext(destination) {
+  const p = BRAND.destination_profiles?.[destination];
+  if (!p) return '';
+  const wildlife = p.wildlife?.slice(0,4).join(', ') || '';
+  const activities = p.activities?.slice(0,2).join(', ') || '';
+  const highlight = p.highlight || '';
+  return [wildlife && `Key wildlife: ${wildlife}`, activities && `Activities: ${activities}`, highlight && `Highlight: ${highlight}`].filter(Boolean).join('. ');
+}
+
+// ── Pick a relevant safari package for the destination ──
+function relatedPackage(destination) {
+  const pkg = BRAND.safari_packages?.find(p => p.destinations?.includes(destination));
+  return pkg ? `Featured package: "${pkg.name}" (${pkg.duration})` : '';
+}
+
+// ── Random USP ──
+function randomUSP() {
+  const usps = BRAND.usps || [];
+  return usps.length ? usps[Math.floor(Math.random() * usps.length)] : '';
+}
+
+async function generateAICaption({ destination, mediaType = 'video', context = '', recentCaptions = [] }) {
+  // Fall back to rich static templates if no key or insufficient credits
+  if (!cfg.ANTHROPIC_KEY) return FALLBACK.generateCaption(destination);
+  // Wrap everything in try/catch so credit errors never crash
+  try {
+
+  const client   = new Anthropic({ apiKey: cfg.ANTHROPIC_KEY });
+  const hashtags = getHashtags(8);
+  const avoidList = recentCaptions.filter(Boolean).slice(0, 5)
+    .map((c, i) => `${i+1}. "${c.substring(0, 80)}..."`)
+    .join('\n');
+
+  const destInfo   = destContext(destination);
+  const pkgInfo    = relatedPackage(destination);
+  const usp        = randomUSP();
+
+  const system = `You are the social media voice for ${BRAND.name} — a premium safari company in Kenya & Tanzania.
+Tagline: "${BRAND.tagline}"
+Website: ${BRAND.website} | WhatsApp/Phone: ${BRAND.phone} | Email: ${BRAND.email}
+Instagram: ${BRAND.socials?.instagram} | Facebook: ${BRAND.socials?.facebook}
+Brand tone: warm, adventurous, aspirational, grounded in authentic African nature.
+USP to weave in: "${usp}"
+${destInfo ? `Destination facts for ${destination}: ${destInfo}` : ''}
+${pkgInfo ? pkgInfo : ''}
+Core hashtags (always include 5-7): ${hashtags.join(' ')}
+
+RULES:
+- Write ONLY the finished post. No preamble, no "Here's your caption".
+- Open with a vivid, emotional, sensory hook — no "Discover" or "Experience" openers.
+- Include destination name and at least one wildlife/activity detail naturally.
+- Mid-post: mention ${BRAND.name} and what makes them special.
+- End: clear CTA → contact details → hashtags.
+- Max 220 words. Conversational but premium.
+- DO NOT copy these recent captions:\n${avoidList || 'none yet'}`;
+
+  const typePrompt = {
+    video:    'social video caption (reels/TikTok)',
+    photo:    'Instagram photo caption',
+    audio:    'podcast or audio promo post',
+    giphy:    'animated GIF caption',
+    auto:     'automated daily post',
+    daily_auto: 'morning daily post',
+  }[mediaType] || 'social media caption';
+
+  const prompt = `Write a ${typePrompt} for ${BRAND.name} featuring ${destination}.${context ? `\n\nMedia context: ${context}` : ''}`;
+
+  const msg = await client.messages.create({
+    model:      'claude-sonnet-4-6',
+    max_tokens: 450,
+    system,
+    messages:   [{ role: 'user', content: prompt }],
+  });
+
+  const caption = msg.content[0].text.trim();
+  return { caption, destination, hashtags, aiGenerated: true };
+  } catch (apiErr) {
+    // Graceful degradation: API error (incl. credit exhaustion) → rich static fallback
+    process.stderr.write(`[ai-captions] API error → fallback: ${apiErr.message}\n`);
+    return FALLBACK.generateCaption(destination);
+  }
+}
+
+async function generatePromoPackage({ destination, mediaType, context, mediaFiles = [], recentCaptions = [] }) {
+  const dest = destination || BRAND.destinations[Math.floor(Math.random() * BRAND.destinations.length)];
+
+  // Run caption + hook in parallel
+  const [captionResult, hookResult] = await Promise.allSettled([
+    generateAICaption({ destination: dest, mediaType, context, recentCaptions }),
+    cfg.ANTHROPIC_KEY
+      ? new Anthropic({ apiKey: cfg.ANTHROPIC_KEY }).messages.create({
+          model: 'claude-sonnet-4-6', max_tokens: 80,
+          messages: [{ role: 'user', content: `Write ONE punchy 6-8 word story hook for a ${dest} safari post. Output ONLY the hook text, no punctuation, no quotes.` }],
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const captionData = captionResult.status === 'fulfilled'
+    ? captionResult.value
+    : FALLBACK.generateCaption(dest);
+
+  let hook = '';
+  if (hookResult.status === 'fulfilled' && hookResult.value?.content?.[0]?.text) {
+    hook = hookResult.value.content[0].text.trim().replace(/^["']|["']$/g, '');
+  } else {
+    // Fallback hook generation when AI hook fails (API error, no credits, etc.)
+    hook = FALLBACK.getHook ? FALLBACK.getHook(dest) : 'Africa\'s wildest chapter starts here';
+  }
+
+  // Pick a related package for the promo bundle
+  const pkg = BRAND.safari_packages?.find(p => p.destinations?.includes(dest));
+
+  return {
+    ...captionData,
+    destination: dest,
+    hook,
+    storyCaption:   hook ? `${hook}\n\nSwipe up ➜ ${BRAND.website}` : '',
+    ctaBlock:       `📞 ${BRAND.phone}\n🌐 ${BRAND.website}\n📧 ${BRAND.email}`,
+    relatedPackage: pkg ? { name: pkg.name, duration: pkg.duration, highlights: pkg.highlights } : null,
+    mediaFiles,
+    generatedAt:    new Date().toISOString(),
+  };
+}
+
+module.exports = { generateAICaption, generatePromoPackage };

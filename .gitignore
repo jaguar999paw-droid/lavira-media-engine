@@ -1,0 +1,34 @@
+# ── Secrets & environment ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime data (never commit) ─────────────────────────────────────────────
+uploads/
+outputs/
+videos/
+lavira.db
+lavira.db-shm
+lavira.db-wal
+db/
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+*.tar
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Stale internal docs (keep README + SHIP_PLAN) ────────────────────────────
+AGENT_HANDOFF.md
+HANDOFFFFFF.md
+MASTER_ANALYSIS_APRIL14.md
+LAVIRA_MCP_HANDOFF.md
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+files.zip
+wget-log
+home/
+'url?sa=t'
+*.log
+.DS_Store
