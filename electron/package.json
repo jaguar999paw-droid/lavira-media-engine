@@ -1,0 +1,132 @@
+{
+  "name": "lavira-media",
+  "version": "1.0.0",
+  "description": "Lavira Safaris — Automated Social Media Content Engine",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev":   "electron . --dev",
+    "build": "electron-builder",
+    "build:win":   "electron-builder --win",
+    "build:mac":   "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId":       "com.lavirasafaris.media",
+    "productName": "Lavira Media",
+    "copyright":   "Copyright 2026 Lavira Safaris",
+    "asar": true,
+
+    "directories": {
+      "output": "dist",
+      "buildResources": "icons"
+    },
+
+    "files": [
+      "main.js",
+      "preload.js",
+      "setup.html",
+      "icons/**"
+    ],
+
+    "extraResources": [
+      {
+        "from": "../src",
+        "to":   "app/src",
+        "filter": ["**/*.js"]
+      },
+      {
+        "from": "../public",
+        "to":   "app/public"
+      },
+      {
+        "from": "../assets",
+        "to":   "app/assets",
+        "filter": ["**", "!external_cache/*.jpg", "!external_cache/*.mp4"]
+      },
+      {
+        "from": "../samples",
+        "to":   "app/samples"
+      },
+      {
+        "from": "../.env.example",
+        "to":   "app/.env.example"
+      },
+      {
+        "from": "../package.json",
+        "to":   "app/package.json"
+      },
+      {
+        "from": "../node_modules",
+        "to":   "app/node_modules",
+        "filter": ["**", "!**/*.md", "!**/*.ts", "!**/test/**", "!**/tests/**", "!**/__tests__/**"]
+      }
+    ],
+
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "icons/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lavira Media",
+      "installerIcon": "icons/icon.ico",
+      "uninstallerIcon": "icons/icon.ico",
+      "installerHeader": "icons/installer-header.bmp",
+      "license": "../LICENSE",
+      "allowElevation": false
+    },
+
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "icons/icon.icns",
+      "category": "public.app-category.productivity",
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "icons/entitlements.plist",
+      "entitlementsInherit": "icons/entitlements.plist"
+    },
+
+    "dmg": {
+      "title": "Lavira Media ${version}",
+      "background": "icons/dmg-background.png",
+      "icon": "icons/icon.icns",
+      "iconSize": 80,
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 400 }
+    },
+
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "icons",
+      "category": "Office;Photography;Network",
+      "desktop": {
+        "StartupNotify": "true"
+      }
+    },
+
+    "appImage": {
+      "artifactName": "Lavira-Media-${version}.AppImage"
+    },
+
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  }
+}
