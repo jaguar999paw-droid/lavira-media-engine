@@ -6,6 +6,7 @@
 # ── Runtime data (never commit) ─────────────────────────────────────────────
 uploads/
 outputs/
+posts/
 videos/
 lavira.db
 lavira.db-shm
@@ -19,27 +20,26 @@ db/
 node_modules/
 npm-debug.log*
 
-# ── Stale internal docs (keep README + SHIP_PLAN) ────────────────────────────
+# ── Electron build output ─────────────────────────────────────────────────────
+electron/dist/
+electron/node_modules/
+
+# ── Stale internal docs ───────────────────────────────────────────────────────
 AGENT_HANDOFF.md
 HANDOFFFFFF.md
 MASTER_ANALYSIS_APRIL14.md
 LAVIRA_MCP_HANDOFF.md
 
+# ── Cache + generated media ───────────────────────────────────────────────────
+assets/external_cache/*.jpg
+assets/external_cache/*.mp4
+
 # ── Misc ─────────────────────────────────────────────────────────────────────
+push.sh
 files.zip
 wget-log
 home/
-'url?sa=t'
 *.log
 .DS_Store
-
-# ── Editor & backup files ──────────────────────────────────────────────────────
 *.bak
 *.orig
-{src/
-
-# ── Posts directory (generated content, never commit) ──────────────────────────
-posts/
-assets/external_cache/*.jpg
-assets/external_cache/*.mp4
-push.sh
