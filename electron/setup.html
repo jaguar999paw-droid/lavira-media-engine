@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Lavira Media — Setup</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0F1C17;color:#FEF9EF;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px}
+  .logo{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .logo-circle{width:48px;height:48px;border-radius:50%;background:#F4A261;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#0F1C17;flex-shrink:0}
+  h1{font-size:22px;font-weight:700;color:#FEF9EF}
+  .tagline{font-size:14px;color:#9fd3aa;margin-bottom:32px;text-align:center}
+  .card{background:#1B2830;border:1px solid rgba(244,162,97,0.2);border-radius:14px;padding:28px 28px 24px;width:100%;max-width:460px}
+  .card h2{font-size:16px;font-weight:600;color:#F4A261;margin-bottom:4px}
+  .card p{font-size:13px;color:#9fd3aa;margin-bottom:22px;line-height:1.6}
+  .field{margin-bottom:16px}
+  label{display:block;font-size:13px;color:#9fd3aa;margin-bottom:6px;font-weight:500}
+  input{width:100%;padding:10px 14px;border-radius:8px;border:1px solid rgba(159,211,170,0.25);background:#0F1C17;color:#FEF9EF;font-size:14px;font-family:monospace;outline:none;transition:border .2s}
+  input:focus{border-color:#F4A261}
+  input::placeholder{color:#4a6650;font-family:monospace}
+  .required-badge{display:inline-block;font-size:10px;background:rgba(244,162,97,0.2);color:#F4A261;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+  .optional-badge{display:inline-block;font-size:10px;background:rgba(159,211,170,0.15);color:#9fd3aa;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+  .hint{font-size:12px;color:#4a6650;margin-top:5px}
+  .hint a{color:#F4A261;text-decoration:none}
+  .hint a:hover{text-decoration:underline}
+  .btn{width:100%;padding:13px;border-radius:10px;border:none;background:#2D6A4F;color:#FEF9EF;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;transition:background .2s}
+  .btn:hover{background:#40916C}
+  .btn:disabled{background:#1B3D2A;color:#4a6650;cursor:not-allowed}
+  .skip{display:block;text-align:center;font-size:13px;color:#4a6650;margin-top:14px;cursor:pointer;text-decoration:underline}
+  .skip:hover{color:#9fd3aa}
+  .status{margin-top:12px;font-size:13px;text-align:center;min-height:20px}
+  .status.ok{color:#52c78a}
+  .status.err{color:#f08080}
+  .divider{border:none;border-top:1px solid rgba(159,211,170,0.12);margin:18px 0}
+</style>
+</head>
+<body>
+<div class="logo">
+  <div class="logo-circle">L</div>
+  <div>
+    <h1>Lavira Media Engine</h1>
+  </div>
+</div>
+<p class="tagline">First-time setup — enter your API keys to unlock all features</p>
+
+<div class="card">
+  <h2>API Keys</h2>
+  <p>These keys connect the engine to AI, stock photos, and GIFs. You can skip any optional key and add it later in your <code>.env</code> file.</p>
+
+  <div class="field">
+    <label>Anthropic API Key <span class="required-badge">required for AI captions</span></label>
+    <input type="password" id="anthropic" placeholder="sk-ant-api03-..." autocomplete="off"/>
+    <div class="hint">Get yours at <a href="#" onclick="open('https://console.anthropic.com/settings/keys')">console.anthropic.com</a></div>
+  </div>
+
+  <hr class="divider"/>
+
+  <div class="field">
+    <label>Pexels API Key <span class="optional-badge">optional</span></label>
+    <input type="password" id="pexels" placeholder="Pexels..." autocomplete="off"/>
+    <div class="hint">Free at <a href="#" onclick="open('https://www.pexels.com/api/')">pexels.com/api</a> — enables stock photo posts</div>
+  </div>
+
+  <div class="field">
+    <label>GIPHY API Key <span class="optional-badge">optional</span></label>
+    <input type="password" id="giphy" placeholder="GIPHY..." autocomplete="off"/>
+    <div class="hint">Free at <a href="#" onclick="open('https://developers.giphy.com/')">developers.giphy.com</a></div>
+  </div>
+
+  <button class="btn" id="saveBtn" onclick="save()">Save &amp; Launch Lavira</button>
+  <span class="skip" onclick="skip()">Skip for now (limited features)</span>
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+function open(url) {
+  // links open in default browser via shell.openExternal in main
+  window.lavira && window.lavira.onSetupComplete && window.open(url);
+}
+async function save() {
+  const btn = document.getElementById('saveBtn');
+  const status = document.getElementById('status');
+  const keys = {
+    anthropic: document.getElementById('anthropic').value.trim(),
+    pexels:    document.getElementById('pexels').value.trim(),
+    giphy:     document.getElementById('giphy').value.trim(),
+  };
+  if (!keys.anthropic) {
+    status.className = 'status err';
+    status.textContent = 'Anthropic key is required for AI features.';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    const result = await window.lavira.saveKeys(keys);
+    if (result.ok) {
+      status.className = 'status ok';
+      status.textContent = 'Keys saved. Starting Lavira...';
+      setTimeout(() => window.lavira.onSetupComplete(), 800);
+    } else {
+      throw new Error(result.error);
+    }
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Save & Launch Lavira';
+  }
+}
+function skip() {
+  window.lavira.saveKeys({ anthropic: '', pexels: '', giphy: '' }).then(() => {
+    window.lavira.onSetupComplete();
+  });
+}
+</script>
+</body>
+</html>
