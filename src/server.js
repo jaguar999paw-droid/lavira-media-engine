@@ -6,12 +6,13 @@ const fs       = require('fs');
 const cfg      = require('./config');
 const BRAND    = require('./orchestrator/brand');
 
-[cfg.UPLOADS_DIR, cfg.OUTPUTS_DIR, cfg.ASSETS_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
+[cfg.UPLOADS_DIR, cfg.OUTPUTS_DIR, cfg.POSTS_DIR, cfg.ASSETS_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
 const app = express();
 app.use(require('cors')());
 app.use(express.json());
 app.use('/outputs', express.static(cfg.OUTPUTS_DIR));
+app.use('/posts', express.static(cfg.POSTS_DIR));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // ── Routes ──────────────────────────────────────────────────────────────────

@@ -37,3 +37,6 @@ home/
 *.bak
 *.orig
 {src/
+
+# ── Posts directory (generated content, never commit) ──────────────────────────
+posts/

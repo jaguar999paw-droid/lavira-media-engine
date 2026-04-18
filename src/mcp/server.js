@@ -214,6 +214,14 @@ const TOOLS = [
     description:'Generate structured multi-part video script with timing, hook, body beats, CTA, B-roll recommendations, and music mood.',
     inputSchema:{ type:'object', properties:{ destination:{type:'string'}, theme:{type:'string'}, duration:{type:'number',description:'Video duration in seconds (default 30)'}, context:{type:'string'} } } },
   
+
+  // POSTS MANAGEMENT
+  { name:'save_to_posts',
+    description:'Copy a finished output file into posts/ subdir. Platforms: instagram, facebook, tiktok, mcp-tasks, archive.',
+    inputSchema:{ type:'object', properties:{ filename:{type:'string',description:'Output filename (from outputs/ dir)'}, platform:{type:'string',enum:['instagram','facebook','tiktok','mcp-tasks','archive'],description:'Target subfolder'}, label:{type:'string',description:'Optional human label to prefix the file e.g. "zebra_grassland_post"'} }, required:['filename','platform'] } },
+  { name:'list_posts',
+    description:'List all files in the posts/ directory, optionally filtered by platform subfolder.',
+    inputSchema:{ type:'object', properties:{ platform:{type:'string',enum:['instagram','facebook','tiktok','mcp-tasks','archive','all']} } } },
   // CACHE MANAGEMENT
   { name:'cache_stats',
     description:'Check external media cache stats: size, entries, age, freshness. Useful for monitoring storage.',
@@ -577,7 +585,8 @@ async function handleTool(name, args) {
       const result = await cards.renderCard({ template, data, backgroundImage:bgImage, profile });
       // Log to memory
       try { log.insert({ jobId:result.filename, mediaType:'card', destination:dest, caption:data.hook||data.caption||'', platforms:[profile] }); } catch {}
-      return { ...result, tip:'File available at /outputs/'+result.filename+' and via UI gallery' };
+      const visionSummary = result.imageAnalysis ? { vision: result.imageAnalysis } : {};
+      return { ...result, ...visionSummary, tip:'File available at /outputs/'+result.filename+' and via UI gallery' };
     }
 
     case 'generate_all_cards': {
@@ -603,7 +612,8 @@ async function handleTool(name, args) {
         } catch(e){}
         const result = await cards.renderCard({ template:next, data, backgroundImage:bgImgS, profile });
         try { log.insert({ jobId:result.filename, mediaType:'card', destination:dest, caption:data.hook||'', platforms:[profile], meta:{ cardTemplate:next } }); } catch {}
-        return { ...result, template:next, tip:'Single post generated. Call again for next template in rotation.' };
+        const visionS = result.imageAnalysis ? { vision: result.imageAnalysis } : {};
+        return { ...result, ...visionS, template:next, tip:'Single post generated. Call again for next template in rotation.' };
       }
       // Generate all 10
       const results = [];
@@ -900,7 +910,34 @@ async function handleTool(name, args) {
       return script;
     }
 
-    // CACHE MANAGEMENT TOOLS
+
+    case 'save_to_posts': {
+      const POSTS_DIR = path.join(__dirname, '..', '..', 'posts');
+      const platform = args.platform || 'mcp-tasks';
+      const destDir = path.join(POSTS_DIR, platform);
+      fs.mkdirSync(destDir, { recursive: true });
+      const srcFile = path.join(cfg.OUTPUTS_DIR, path.basename(args.filename));
+      if (!fs.existsSync(srcFile)) throw new Error('Output file not found: ' + args.filename);
+      const label = args.label ? args.label.replace(/[^a-z0-9_-]/gi, '_') + '_' : '';
+      const destName = label + path.basename(args.filename);
+      const destFile = path.join(destDir, destName);
+      fs.copyFileSync(srcFile, destFile);
+      return { success: true, savedTo: 'posts/' + platform + '/' + destName, url: '/posts/' + platform + '/' + destName, sizeMB: (fs.statSync(destFile).size / 1024 / 1024).toFixed(2) };
+    }
+
+    case 'list_posts': {
+      const POSTS_DIR = path.join(__dirname, '..', '..', 'posts');
+      const platform = args.platform || 'all';
+      const platforms = platform === 'all' ? ['instagram','facebook','tiktok','mcp-tasks','archive'] : [platform];
+      const result = {};
+      for (const pl of platforms) {
+        const d = path.join(POSTS_DIR, pl);
+        fs.mkdirSync(d, { recursive: true });
+        result[pl] = fs.readdirSync(d).filter(f => /\.(jpg|jpeg|png|mp4|mp3|gif)$/i.test(f)).map(f => { const s = fs.statSync(path.join(d,f)); return { filename: f, url: '/posts/' + pl + '/' + f, sizeMB: (s.size/1024/1024).toFixed(2), created: s.mtime }; }).sort((a,b) => new Date(b.created) - new Date(a.created));
+      }
+      const total = Object.values(result).reduce((n, arr) => n + arr.length, 0);
+      return { platforms: result, total };
+    }
     case 'cache_stats': {
       const mediaCache = require('../engines/media-cache');
       return mediaCache.getStats();

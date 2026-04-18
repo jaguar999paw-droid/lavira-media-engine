@@ -12,6 +12,7 @@ const { v4: uuid } = require('uuid');
 const cfg     = require('../config');
 const BRAND   = require('../orchestrator/brand');
 const { generatePromoPackage } = require('../content/ai-captions');
+const { resolvePostData } = require('./post-defaults');
 const mediaLib = require('./media-library');
 
 const OUTPUTS_DIR = cfg.OUTPUTS_DIR;
@@ -179,8 +180,16 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
   // 4. Cleanup temp file
   try { fs.unlinkSync(tmpPath); } catch {}
 
+  // Enrich return with smart defaults (hook, highlight, season, CTA)
+  let resolvedDefaults = {};
+  try { resolvedDefaults = await resolvePostData(dest, thm, {}, {}); } catch(_) {}
+
   return {
     destination:  dest,
+    hook:         resolvedDefaults.hook || '',
+    highlight:    resolvedDefaults.highlight || '',
+    seasonLine:   resolvedDefaults.seasonLine || '',
+    cta:          resolvedDefaults.cta || '',
     theme:        thm,
     query,
     stockCredit,
