@@ -2,7 +2,7 @@
 
 > **AI-powered safari marketing content engine** — generates branded Instagram posts, videos, and audio for safari companies, fully controllable via an MCP server that plugs directly into Claude Desktop or any MCP-compatible AI agent.
 
-[![Node.js](https://img.shields.io/badge/Node.js-20+-green)](https://nodejs.org)
+[![Build & Release](https://github.com/jaguar999paw-droid/lavira-media-engine/actions/workflows/build-desktop.yml/badge.svg)](https://github.com/jaguar999paw-droid/lavira-media-engine/actions/workflows/build-desktop.yml) [![Node.js](https://img.shields.io/badge/Node.js-20+-green)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/Docker-required-blue)](https://docker.com)
 [![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)

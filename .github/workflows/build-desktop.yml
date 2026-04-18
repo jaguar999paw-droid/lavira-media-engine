@@ -19,29 +19,26 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
-      # Install root project deps (sharp, ffmpeg-static, etc.)
       - name: Install root deps
-        run: npm install --no-audit --prefer-offline
+        run: npm install --no-audit --no-fund
 
-      # Install electron + electron-builder in the electron/ subdir
       - name: Install electron deps
         working-directory: electron
-        run: npm install --no-audit
+        run: npm install --no-audit --no-fund
 
       - name: Build Windows installer
         working-directory: electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Explicitly disable code signing (no cert → build still succeeds)
           WIN_CSC_LINK: ''
           WIN_CSC_KEY_PASSWORD: ''
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          DEBUG: 'electron-builder'
         run: npx electron-builder --win --x64 --publish never
 
-      - name: List dist output
+      - name: List dist
         working-directory: electron
         run: dir dist
 
@@ -61,15 +58,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
       - name: Install root deps
-        run: npm install --no-audit --prefer-offline
+        run: npm install --no-audit --no-fund
 
       - name: Install electron deps
         working-directory: electron
-        run: npm install --no-audit
+        run: npm install --no-audit --no-fund
 
       - name: Build macOS DMG
         working-directory: electron
@@ -77,11 +73,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           CSC_LINK: ''
-          # Disable Gatekeeper hardened runtime (no Apple Developer cert)
-          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: 'true'
+          DEBUG: 'electron-builder'
         run: npx electron-builder --mac --x64 --publish never
 
-      - name: List dist output
+      - name: List dist
         working-directory: electron
         run: ls -la dist/
 
@@ -101,10 +96,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
-      - name: Install system libs for electron-builder
+      - name: Install system libs
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -113,19 +107,20 @@ jobs:
             libxcb-dri3-0 libdrm2 libgbm1
 
       - name: Install root deps
-        run: npm install --no-audit --prefer-offline
+        run: npm install --no-audit --no-fund
 
       - name: Install electron deps
         working-directory: electron
-        run: npm install --no-audit
+        run: npm install --no-audit --no-fund
 
       - name: Build Linux packages
         working-directory: electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: 'electron-builder'
         run: npx electron-builder --linux AppImage deb --publish never
 
-      - name: List dist output
+      - name: List dist
         working-directory: electron
         run: ls -la dist/
 
@@ -138,7 +133,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ── Publish GitHub Release with all three installers ─────────────────────────
+  # ── Publish GitHub Release ────────────────────────────────────────────────────
   release:
     name: Publish Release
     needs: [build-windows, build-mac, build-linux]
@@ -147,7 +142,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Download all three artifacts into a flat directory
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
@@ -171,36 +165,31 @@ jobs:
 
             | Platform | Installer | Instructions |
             |---|---|---|
-            | **Windows 10/11** | `Lavira-Media-Setup-*.exe` | Double-click → Next → Finish → opens from Desktop shortcut |
+            | **Windows 10/11** | `Lavira-Media-Setup-*.exe` | Double-click → Next → Finish → open from Desktop shortcut |
             | **macOS 12+** | `Lavira-Media-Setup-*.dmg` | Open DMG → drag **Lavira Media** to Applications → launch |
-            | **Linux** | `Lavira-Media-Setup-*.AppImage` | `chmod +x *.AppImage` → double-click to run (no install needed) |
-            | **Linux (Debian/Ubuntu)** | `Lavira-Media-Setup-*.deb` | `sudo dpkg -i *.deb` → find in app menu |
+            | **Linux** | `Lavira-Media-Setup-*.AppImage` | `chmod +x *.AppImage` → double-click to run |
+            | **Linux (deb)** | `Lavira-Media-Setup-*.deb` | `sudo dpkg -i *.deb` → find in app menu |
 
             ---
 
-            ### 🔑 On first launch — Setup Wizard
+            ### 🔑 First launch — Setup Wizard
 
-            A one-time setup window opens and asks for your API keys:
+            A one-time setup window asks for your API keys:
 
-            | Key | Required? | Where to get it |
+            | Key | Required? | Get it at |
             |---|---|---|
             | **Anthropic API key** | ✅ Required | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
-            | **Pexels API key** | Optional | [pexels.com/api](https://www.pexels.com/api/) — free |
-            | **GIPHY API key** | Optional | [developers.giphy.com](https://developers.giphy.com/) — free |
-
-            You can skip optional keys and add them later via the Settings panel in the app.
+            | **Pexels API key** | Optional (free) | [pexels.com/api](https://www.pexels.com/api/) |
+            | **GIPHY API key** | Optional (free) | [developers.giphy.com](https://developers.giphy.com/) |
 
             ---
 
             ### 💡 What's inside
 
-            - **52 AI-powered MCP tools** — generate branded posts, fetch stock media, publish to Instagram/TikTok/Facebook
-            - **Lavira card templates** — 10 SVG designs across 3 visual families, Claude Vision–aware
-            - **Bundled FFmpeg** — video/audio processing without any system install
-            - **System tray** — runs quietly in the background, opens the full Web UI in-window
-            - **MCP Server** on port 4006 — connect Claude Desktop to control the engine conversationally
-
-            ---
+            - **52 AI-powered MCP tools** — branded posts, stock media, Instagram/TikTok/Facebook publishing
+            - **Bundled FFmpeg** — no system install needed
+            - **System tray** — runs in background, reopens with one click
+            - **MCP Server on :4006** — connect Claude Desktop for conversational control
 
             **Full docs:** [github.com/jaguar999paw-droid/lavira-media-engine](https://github.com/jaguar999paw-droid/lavira-media-engine)
           files: release-assets/*

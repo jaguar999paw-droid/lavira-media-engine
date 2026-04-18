@@ -4,6 +4,17 @@ All notable changes to Lavira Media Engine are documented here.
 
 ---
 
+## [1.1.1] — 2026-04-19
+
+### Fixed
+- **CI: remove ** — on a fresh runner with an empty npm cache this flag
+  makes npm refuse all downloads and hard-fail. Replaced with  which
+  downloads normally but skips security-audit and funding nags (saves ~15 s per job).
+- **CI: Node.js 20 → 22** — GitHub Actions is deprecating Node 20 runners. Bumped all three
+  build jobs to Node 22 to silence warnings and ensure long-term compatibility.
+- **CI: added ** to all build steps — surfaces the actual error line
+  in logs instead of just "exit code 1".
+
 ## [1.1.0] — 2026-04-19
 
 ### Fixed
