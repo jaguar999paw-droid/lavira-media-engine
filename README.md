@@ -19,7 +19,7 @@ Lavira Media Engine automates the full content pipeline for safari marketing:
 - **Processes audio** — normalises to broadcast standard (-16 LUFS), exports OGG/MP3
 - **Publishes directly** to Instagram, Facebook, and TikTok (with tokens)
 - **Runs a scheduler** — auto-generates daily promos at 06:00 EAT
-- **Exposes 26 MCP tools** so Claude Desktop (or any AI agent) can control the entire pipeline conversationally
+- **Exposes 52 MCP tools** so Claude Desktop (or any AI agent) can control the entire pipeline conversationally
 
 ---
 
@@ -38,7 +38,7 @@ Lavira Media Engine automates the full content pipeline for safari marketing:
 │  │  ├─ REST API     │     │  ├─ RPC  → /rpc          │  │
 │  │  │  /api/*       │     │  └─ Health → /health     │  │
 │  │  └─ Static files │     │                          │  │
-│  │     /outputs/*   │     │  26 tools exposed        │  │
+│  │     /outputs/*   │     │  52 tools exposed        │  │
 │  └────────┬─────────┘     └──────────┬───────────────┘  │
 │           │                          │                   │
 │           └──────── lavira-net ───────┘                  │
@@ -168,7 +168,7 @@ curl http://localhost:4005/api/health
 # Expected: {"status":"ok","engine":"Lavira Media Engine v3.0",...}
 
 curl http://localhost:4006/health
-# Expected: {"status":"ok","tools":26}
+# Expected: {"status":"ok","tools":52}
 ```
 
 ---
@@ -259,7 +259,7 @@ Copy `.env.example` → `.env` and fill in your values. The engine runs in degra
 
 ## MCP Integration
 
-The MCP server is the primary interface for AI agents. It exposes **26 tools** covering the full content pipeline.
+The MCP server is the primary interface for AI agents. It exposes **52 tools** covering the full content pipeline.
 
 ### Connect Claude Desktop
 
@@ -454,7 +454,11 @@ lavira-media-engine/
 │   │   ├── media-mixer.js
 │   │   ├── promo.js
 │   │   ├── video.js
-│   │   └── video-script.js
+│   │   ├── video-script.js
+│   │   ├── card-templates.js   # 3 layout families (Minimal Float, Split Panel, Immersive Overlay)
+│   │   ├── image-vision.js     # Claude Vision — safeTextZone + scene analysis
+│   │   ├── post-defaults.js    # Smart defaults resolver (mood/season/LRU)
+│   │   └── context-pools.js    # Curated copy vocabulary (hooks, CTAs, angles)
 │   ├── orchestrator/
 │   │   ├── brand.js                # ← Edit this for your brand
 │   │   ├── memory.js               # SQLite job history

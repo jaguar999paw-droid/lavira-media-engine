@@ -32,3 +32,8 @@ home/
 'url?sa=t'
 *.log
 .DS_Store
+
+# ── Editor & backup files ──────────────────────────────────────────────────────
+*.bak
+*.orig
+{src/

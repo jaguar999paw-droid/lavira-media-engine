@@ -78,6 +78,7 @@ volumes:
     name: lavira-outputs
   lavira-db:
     name: lavira-db
+    external: true
 
 networks:
   lavira-net:
