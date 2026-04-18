@@ -1,0 +1,370 @@
+name: Build & Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:           # allow manual trigger from GitHub UI
+
+permissions:
+  contents: write              # needed to create GitHub Releases
+
+jobs:
+  # ── Windows ──────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows installer (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install ffmpeg-static (bundles FFmpeg into app)
+        run: npm install ffmpeg-static --save
+        # This ensures FFmpeg is bundled — no system install needed on user machine
+
+      - name: Patch server to use bundled FFmpeg
+        shell: bash
+        run: |
+          node -e "
+          const fs = require('fs');
+          const cfg = 'src/config.js';
+          let c = fs.readFileSync(cfg, 'utf8');
+          if (!c.includes('ffmpeg-static')) {
+            const patch = \`
+          try {
+            const ffmpegStatic = require('ffmpeg-static');
+            if (ffmpegStatic) {
+              require('fluent-ffmpeg').setFfmpegPath(ffmpegStatic);
+              require('fluent-ffmpeg').setFfprobePath(require('ffprobe-static').path);
+            }
+          } catch(_) {}
+          \`;
+            c = patch + '\n' + c;
+            fs.writeFileSync(cfg, c);
+            console.log('FFmpeg path patched');
+          } else {
+            console.log('FFmpeg patch already present');
+          }
+          "
+
+      - name: Install electron deps
+        working-directory: electron
+        run: npm ci
+
+      - name: Generate placeholder icons (if missing)
+        shell: bash
+        run: |
+          mkdir -p electron/icons
+          # Create minimal valid ICO if not present (CI placeholder)
+          if [ ! -f electron/icons/icon.ico ]; then
+            node -e "
+          const {createCanvas} = require('canvas') || {};
+          " 2>/dev/null || true
+            # Use a simple Python fallback for ICO creation
+            python3 - << 'PYEOF' 2>/dev/null || true
+          import struct, os
+          os.makedirs('electron/icons', exist_ok=True)
+
+          def make_bmp_data(size, r, g, b):
+              w = h = size
+              row = bytes([b, g, r, 255] * w)
+              pixels = row * h
+              file_size = 54 + len(pixels)
+              bmp = struct.pack('<2sIHHI', b'BM', file_size, 0, 0, 54)
+              bmp += struct.pack('<IIIHHIIIIII', 40, w, -h, 1, 32, 0, len(pixels), 2835, 2835, 0, 0)
+              return bmp + pixels
+
+          # Create minimal PNG using raw bytes (1x1 green pixel)
+          import zlib, base64
+          def png_1x1(r, g, b):
+              def chunk(t, d):
+                  c = struct.pack('>I', len(d)) + t + d
+                  return c + struct.pack('>I', zlib.crc32(t+d) & 0xffffffff)
+              ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+              idat = zlib.compress(b'\x00' + bytes([r, g, b]))
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+
+          # Write a 256x256 green PNG as icon.png
+          import io
+          def make_png(size, r, g, b):
+              def chunk(t, d):
+                  c = struct.pack('>I', len(d)) + t + d
+                  return c + struct.pack('>I', zlib.crc32(t+d) & 0xffffffff)
+              row = b'\x00' + bytes([r, g, b] * size)
+              idat = zlib.compress(row * size)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+
+          with open('electron/icons/icon.png', 'wb') as f:
+              f.write(make_png(256, 45, 106, 79))
+
+          # Write minimal ICO (16x16 and 32x32 entries pointing to same 32x32 BMP)
+          bmp32 = make_bmp_data(32, 45, 106, 79)
+          bmp_data = bmp32[54:]  # pixel data only for ICO
+          # ICO header: 2 entries
+          ico = struct.pack('<HHH', 0, 1, 2)
+          # 16x16 entry
+          ico += struct.pack('<BBBBHHII', 16, 16, 0, 0, 1, 32, len(bmp32), 6 + 16 + 16)
+          # 32x32 entry  
+          ico += struct.pack('<BBBBHHII', 32, 32, 0, 0, 1, 32, len(bmp32), 6 + 16 + 16 + len(bmp32))
+          ico += bmp32 + bmp32
+          with open('electron/icons/icon.ico', 'wb') as f:
+              f.write(ico)
+
+          # Copy as icns placeholder (macOS — real icns should be provided)
+          import shutil
+          shutil.copy('electron/icons/icon.png', 'electron/icons/icon.icns')
+          print('Placeholder icons created')
+          PYEOF
+            echo "Icon generation attempted"
+          fi
+
+      - name: Generate entitlements.plist placeholder
+        shell: bash
+        run: |
+          cat > electron/icons/entitlements.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.allow-jit</key><true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+            <key>com.apple.security.network.client</key><true/>
+            <key>com.apple.security.files.user-selected.read-write</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build Windows installer
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: electron/dist/*.exe
+          if-no-files-found: error
+
+  # ── macOS ─────────────────────────────────────────────────────────────────────
+  build-mac:
+    name: macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install ffmpeg-static
+        run: npm install ffmpeg-static --save
+
+      - name: Install electron deps
+        working-directory: electron
+        run: npm ci
+
+      - name: Generate placeholder icons
+        run: |
+          mkdir -p electron/icons
+          python3 - << 'PYEOF'
+          import struct, zlib, shutil, os
+          os.makedirs('electron/icons', exist_ok=True)
+          def chunk(t, d):
+              c = struct.pack('>I', len(d)) + t + d
+              return c + struct.pack('>I', zlib.crc32(t+d) & 0xffffffff)
+          def make_png(size, r, g, b):
+              row = b'\x00' + bytes([r, g, b] * size)
+              idat = zlib.compress(row * size)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+          for f in ['icon.png','icon.icns']:
+              if not os.path.exists(f'electron/icons/{f}'):
+                  with open(f'electron/icons/{f}', 'wb') as fh:
+                      fh.write(make_png(256, 45, 106, 79))
+          if not os.path.exists('electron/icons/icon.ico'):
+              shutil.copy('electron/icons/icon.png', 'electron/icons/icon.ico')
+          print('Icons ready')
+          PYEOF
+
+      - name: Generate entitlements.plist
+        run: |
+          cat > electron/icons/entitlements.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.allow-jit</key><true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+            <key>com.apple.security.network.client</key><true/>
+            <key>com.apple.security.files.user-selected.read-write</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build macOS DMG
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false   # skip code signing (no cert)
+        run: npm run build:mac -- --x64   # build x64 only in CI (avoids arm64 notarisation issues)
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: electron/dist/*.dmg
+          if-no-files-found: error
+
+  # ── Linux ─────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: Linux AppImage + deb
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install system deps for electron-builder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libarchive-tools rpm fakeroot dpkg \
+            libgtk-3-dev libnotify-dev libgconf-2-4 \
+            libnss3 libxss1 libxtst6 xauth xvfb
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install ffmpeg-static
+        run: npm install ffmpeg-static --save
+
+      - name: Install electron deps
+        working-directory: electron
+        run: npm ci
+
+      - name: Generate placeholder icons
+        run: |
+          mkdir -p electron/icons
+          python3 - << 'PYEOF'
+          import struct, zlib, shutil, os
+          os.makedirs('electron/icons', exist_ok=True)
+          def chunk(t, d):
+              c = struct.pack('>I', len(d)) + t + d
+              return c + struct.pack('>I', zlib.crc32(t+d) & 0xffffffff)
+          def make_png(size, r, g, b):
+              row = b'\x00' + bytes([r, g, b] * size)
+              idat = zlib.compress(row * size)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+          for sz in [16, 32, 48, 64, 128, 256]:
+              os.makedirs(f'electron/icons/{sz}x{sz}', exist_ok=True)
+              with open(f'electron/icons/{sz}x{sz}/icon.png', 'wb') as f:
+                  f.write(make_png(sz, 45, 106, 79))
+          with open('electron/icons/icon.png', 'wb') as f:
+              f.write(make_png(256, 45, 106, 79))
+          for ext in ['ico', 'icns']:
+              if not os.path.exists(f'electron/icons/icon.{ext}'):
+                  shutil.copy('electron/icons/icon.png', f'electron/icons/icon.{ext}')
+          print('Icons ready')
+          PYEOF
+
+      - name: Generate entitlements.plist
+        run: |
+          cat > electron/icons/entitlements.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.allow-jit</key><true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+            <key>com.apple.security.network.client</key><true/>
+            <key>com.apple.security.files.user-selected.read-write</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build Linux packages
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:linux
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            electron/dist/*.AppImage
+            electron/dist/*.deb
+          if-no-files-found: error
+
+  # ── Publish GitHub Release ─────────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-mac, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Lavira Media ${{ github.ref_name }}"
+          body: |
+            ## Lavira Media Engine ${{ github.ref_name }}
+
+            ### Download for your platform
+
+            | Platform | File | Notes |
+            |---|---|---|
+            | **Windows** | `Lavira-Media-Setup-*.exe` | Run installer, double-click Lavira Media |
+            | **macOS** | `Lavira-Media-*.dmg` | Open DMG, drag to Applications |
+            | **Linux** | `Lavira-Media-*.AppImage` | `chmod +x` then run, or install `.deb` |
+
+            ### First-time setup
+            On first launch, a setup wizard will ask for your API keys:
+            - **Anthropic** (required) — for AI captions: [console.anthropic.com](https://console.anthropic.com/settings/keys)
+            - **Pexels** (optional) — stock photos: [pexels.com/api](https://www.pexels.com/api/)
+            - **GIPHY** (optional) — GIF posts: [developers.giphy.com](https://developers.giphy.com/)
+
+            ### No installation of Node.js or FFmpeg needed
+            Everything is bundled inside the installer.
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
