@@ -488,6 +488,76 @@ lavira-media-engine/
 
 ---
 
+
+---
+
+## Desktop App (Windows / macOS / Linux)
+
+> **No terminal, no Docker, no Node.js needed.** The desktop app bundles everything.
+
+Download the installer for your platform from the [**Releases page**](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest):
+
+| Platform | File | What to do |
+|---|---|---|
+| **Windows 10/11** | `Lavira-Media-Setup-*.exe` | Double-click → Next → Finish → open from Desktop |
+| **macOS 12+** | `Lavira-Media-Setup-*.dmg` | Open DMG → drag to Applications → launch |
+| **Linux** | `Lavira-Media-Setup-*.AppImage` | `chmod +x *.AppImage` → double-click |
+| **Linux (deb)** | `Lavira-Media-Setup-*.deb` | `sudo dpkg -i *.deb` → find in app menu |
+
+### What the desktop app does differently from Docker
+
+The Electron wrapper starts the Express engine as a child process inside the same app bundle. You get the exact same Web UI at `localhost:4005` and MCP server at `localhost:4006` — but instead of a terminal and Docker, you just double-click an icon.
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Lavira Media (Electron window)                     │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐   │
+│  │  Web UI — http://localhost:4005             │   │
+│  │  (the full studio, rendered in-app)         │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+│  System tray icon → right-click:                    │
+│    Open Lavira | Open in Browser | Quit             │
+└─────────────────────────────────────────────────────┘
+       ↑
+  MCP Server still on :4006 — connect Claude Desktop
+  the same way as the Docker setup
+```
+
+### First launch — Setup Wizard
+
+On first run, a setup wizard asks for your API keys before starting the engine:
+
+| Key | Required? | Get it at |
+|---|---|---|
+| **Anthropic API key** | ✅ | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| **Pexels API key** | Optional (free) | [pexels.com/api](https://www.pexels.com/api/) |
+| **GIPHY API key** | Optional (free) | [developers.giphy.com](https://developers.giphy.com/) |
+
+Keys are saved to a `.env` file in the app's data directory. You can update them anytime via the Settings panel in the Web UI.
+
+### Building from source
+
+```bash
+# 1. Clone and install root deps
+git clone https://github.com/jaguar999paw-droid/lavira-media-engine.git
+cd lavira-media-engine
+npm install
+
+# 2. Install Electron build deps
+cd electron && npm install && cd ..
+
+# 3. Run in dev mode (opens a window, uses your local .env)
+cd electron && npm start
+
+# 4. Build installer for your current platform
+cd electron
+npm run build:win    # Windows → electron/dist/*.exe
+npm run build:mac    # macOS  → electron/dist/*.dmg
+npm run build:linux  # Linux  → electron/dist/*.AppImage + *.deb
+```
+
 ## Contributing
 
 PRs welcome. Keep secrets in `.env`, never in source. Run `bash start.sh` before testing.
