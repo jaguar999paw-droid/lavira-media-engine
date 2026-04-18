@@ -5,15 +5,14 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "dev":   "electron . --dev",
-    "build": "electron-builder",
-    "build:win":   "electron-builder --win",
-    "build:mac":   "electron-builder --mac",
+    "start":       "electron .",
+    "build":       "electron-builder",
+    "build:win":   "electron-builder --win --x64",
+    "build:mac":   "electron-builder --mac --x64",
     "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^31.7.7",
+    "electron":         "^31.7.7",
     "electron-builder": "^24.13.3"
   },
   "build": {
@@ -23,8 +22,8 @@
     "asar": true,
 
     "directories": {
-      "output": "dist",
-      "buildResources": "icons"
+      "output":          "dist",
+      "buildResources":  "icons"
     },
 
     "files": [
@@ -36,8 +35,8 @@
 
     "extraResources": [
       {
-        "from": "../src",
-        "to":   "app/src",
+        "from":   "../src",
+        "to":     "app/src",
         "filter": ["**/*.js"]
       },
       {
@@ -45,8 +44,8 @@
         "to":   "app/public"
       },
       {
-        "from": "../assets",
-        "to":   "app/assets",
+        "from":   "../assets",
+        "to":     "app/assets",
         "filter": ["**", "!external_cache/*.jpg", "!external_cache/*.mp4"]
       },
       {
@@ -62,9 +61,19 @@
         "to":   "app/package.json"
       },
       {
-        "from": "../node_modules",
-        "to":   "app/node_modules",
-        "filter": ["**", "!**/*.md", "!**/*.ts", "!**/test/**", "!**/tests/**", "!**/__tests__/**"]
+        "from":   "../node_modules",
+        "to":     "app/node_modules",
+        "filter": [
+          "**",
+          "!**/*.md",
+          "!**/*.ts",
+          "!**/*.d.ts",
+          "!**/test/**",
+          "!**/tests/**",
+          "!**/__tests__/**",
+          "!**/coverage/**",
+          "!**/.github/**"
+        ]
       }
     ],
 
@@ -77,35 +86,32 @@
     },
 
     "nsis": {
-      "oneClick": false,
+      "oneClick":                        false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Lavira Media",
-      "installerIcon": "icons/icon.ico",
-      "uninstallerIcon": "icons/icon.ico",
-      "installerHeader": "icons/installer-header.bmp",
-      "license": "../LICENSE",
-      "allowElevation": false
+      "createDesktopShortcut":           true,
+      "createStartMenuShortcut":         true,
+      "shortcutName":                    "Lavira Media",
+      "installerIcon":                   "icons/icon.ico",
+      "uninstallerIcon":                 "icons/icon.ico",
+      "license":                         "../LICENSE",
+      "allowElevation":                  false
     },
 
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["x64", "arm64"] }
+        { "target": "dmg", "arch": ["x64"] }
       ],
-      "icon": "icons/icon.icns",
-      "category": "public.app-category.productivity",
-      "darkModeSupport": true,
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "icons/entitlements.plist",
-      "entitlementsInherit": "icons/entitlements.plist"
+      "icon":              "icons/icon.icns",
+      "category":          "public.app-category.productivity",
+      "darkModeSupport":   true,
+      "hardenedRuntime":   false,
+      "gatekeeperAssess":  false,
+      "identity":          null
     },
 
     "dmg": {
-      "title": "Lavira Media ${version}",
-      "background": "icons/dmg-background.png",
-      "icon": "icons/icon.icns",
+      "title":    "Lavira Media ${version}",
+      "icon":     "icons/icon.icns",
       "iconSize": 80,
       "contents": [
         { "x": 130, "y": 220 },
@@ -115,16 +121,9 @@
     },
 
     "linux": {
-      "target": ["AppImage", "deb"],
-      "icon": "icons",
-      "category": "Office;Photography;Network",
-      "desktop": {
-        "StartupNotify": "true"
-      }
-    },
-
-    "appImage": {
-      "artifactName": "Lavira-Media-${version}.AppImage"
+      "target":   ["AppImage", "deb"],
+      "icon":     "icons/icon.png",
+      "category": "Office;Photography;Network"
     },
 
     "artifactName": "${productName}-Setup-${version}.${ext}"
