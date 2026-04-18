@@ -40,3 +40,6 @@ home/
 
 # ── Posts directory (generated content, never commit) ──────────────────────────
 posts/
+assets/external_cache/*.jpg
+assets/external_cache/*.mp4
+push.sh
