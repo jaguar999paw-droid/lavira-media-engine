@@ -130,6 +130,20 @@ bash start.sh
 # MCP SSE: http://localhost:4006/sse
 ```
 
+### Windows — Quick Setup ⭐ Recommended
+
+> **Fastest path for Windows users.** One zip, one double-click.
+
+**[⬇ Download `lavira-media-engine-windows-setup.zip`](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest)**
+
+1. Install **[Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)** — free, ~500 MB — then restart your PC
+2. Extract the zip anywhere, e.g. `C:\LaviraMedia\`
+3. Double-click **`start.bat`**
+
+The script checks for Docker, auto-creates your `.env` (opens Notepad for API keys), pulls the images, starts the engine, and opens **http://localhost:4005** in your browser. See `SETUP.md` inside the zip for the full guide including Claude Desktop MCP setup.
+
+---
+
 ### Windows (PowerShell)
 
 ```powershell
