@@ -1,0 +1,95 @@
+name: Package Windows ZIP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package-windows:
+    name: Build lavira-media-engine-windows-setup.zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Windows setup ZIP
+        run: |
+          # Create a staging directory with everything a Windows user needs
+          mkdir -p staging
+
+          # Core files at root level
+          cp docker-compose.yml       staging/
+          cp .env.example             staging/
+          cp Dockerfile               staging/
+
+          # Windows-specific files (start.bat + guide) go directly in root
+          cp windows/start.bat        staging/
+          cp windows/SETUP.md         staging/
+
+          # Make the zip — name matches exactly what the README says
+          cd staging
+          zip -r ../lavira-media-engine-windows-setup.zip .
+          cd ..
+
+          echo "ZIP contents:"
+          unzip -l lavira-media-engine-windows-setup.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup-zip
+          path: lavira-media-engine-windows-setup.zip
+          retention-days: 14
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: "Lavira Media ${{ github.ref_name }}"
+          body: |
+            ## 🦁 Lavira Media Engine ${{ github.ref_name }}
+
+            ### ⬇️ Download
+
+            | File | Platform | Instructions |
+            |------|----------|-------------|
+            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** | Extract → double-click `start.bat` → done |
+            | `Source code (zip)` | All | For developers |
+
+            ---
+
+            ### Windows Quick Start (3 steps)
+
+            **1.** Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) — restart your PC after.
+
+            **2.** Extract `lavira-media-engine-windows-setup.zip` anywhere (e.g. `C:\LaviraMedia\`).
+
+            **3.** Double-click **`start.bat`**.
+
+            On first run it opens Notepad for your API keys, then launches the full Lavira studio at **http://localhost:4005** and opens it in your browser automatically.
+
+            ---
+
+            ### API Keys
+
+            | Key | Required? | Get it at |
+            |-----|-----------|-----------|
+            | **Anthropic** | ✅ Yes | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+            | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) — free |
+            | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) — free |
+
+            See **`SETUP.md`** inside the zip for the full guide including Claude Desktop MCP setup and troubleshooting.
+
+            ---
+
+            **Docs:** [github.com/jaguar999paw-droid/lavira-media-engine](https://github.com/jaguar999paw-droid/lavira-media-engine)
+          files: lavira-media-engine-windows-setup.zip
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
