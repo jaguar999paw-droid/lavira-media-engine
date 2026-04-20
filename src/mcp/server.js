@@ -232,6 +232,24 @@ const TOOLS = [
   { name:'cache_clear',
     description:'Clear entire external media cache. Useful for manual cleanup.',
     inputSchema:{ type:'object', properties:{} } },
+  // ─── ROTATION & DEDUP (improvement #5) ────────────────────────────────────
+  { name:'get_destination_rotation_status',
+    description:'Show per-destination posting frequency: last posted date, 7d/30d counts, priority score. Use to decide what destination to post about next.',
+    inputSchema:{ type:'object', properties:{} } },
+  { name:'check_content_duplicate',
+    description:'Check if a caption is too similar to a recent post for the same destination. Returns isDuplicate + matchedJobId if a match is found.',
+    inputSchema:{ type:'object', properties:{ caption:{type:'string'}, destination:{type:'string'}, windowDays:{type:'number',description:'Lookback window in days (default 14)'} }, required:['caption','destination'] } },
+  // ─── BOOKING TRIGGERS (improvement #3) ────────────────────────────────────
+  { name:'record_booking',
+    description:'Manually record a confirmed safari booking. Stores guest info and auto-triggers a thank-you social post unless autoTriggerContent is false.',
+    inputSchema:{ type:'object', properties:{ guestName:{type:'string'}, guestEmail:{type:'string'}, destination:{type:'string'}, packageName:{type:'string'}, travelDate:{type:'string'}, partySize:{type:'number'}, notes:{type:'string'}, autoTriggerContent:{type:'boolean'} } } },
+  { name:'trigger_post_booking_flow',
+    description:'Trigger social content generation for an already-recorded booking. Generates a guest thank-you + excitement post for their destination.',
+    inputSchema:{ type:'object', properties:{ bookingId:{type:'string'} }, required:['bookingId'] } },
+  { name:'list_booking_events',
+    description:'List recent bookings with guest details, destination, travel date, and whether post-booking content was triggered.',
+    inputSchema:{ type:'object', properties:{ limit:{type:'number'} } } },
+
 ];
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
@@ -962,6 +980,60 @@ async function handleTool(name, args) {
         ...result
       };
     }
+
+    // ─── ROTATION & DEDUP ────────────────────────────────────────────────────
+    case 'get_destination_rotation_status': {
+      const { rotationStatus } = require('../orchestrator/memory');
+      const status = rotationStatus.get(BRAND.destinations);
+      return { content:[{ type:'text', text: JSON.stringify(status, null, 2) }] };
+    }
+
+    case 'check_content_duplicate': {
+      const { checkDuplicate } = require('../orchestrator/memory');
+      const result = checkDuplicate(args.caption, args.destination, args.windowDays || 14);
+      return { content:[{ type:'text', text: JSON.stringify(result) }] };
+    }
+
+    // ─── BOOKING TRIGGERS ────────────────────────────────────────────────────
+    case 'record_booking': {
+      const { bookings: bkgs } = require('../orchestrator/memory');
+      const bookingId = bkgs.insert({ ...args, source: 'mcp' });
+      if (args.autoTriggerContent !== false) {
+        // Fire-and-forget via HTTP to reuse the route logic
+        const triggerReq = require('http').request({
+          hostname: 'localhost', port: cfg.PORT || 3000,
+          path: `/api/bookings/${bookingId}/trigger-content`,
+          method: 'POST', headers: { 'Content-Type': 'application/json' }
+        }, () => {});
+        triggerReq.on('error', () => {});
+        triggerReq.end();
+      }
+      return { content:[{ type:'text', text: JSON.stringify({ success:true, bookingId, message:'Booking recorded. Content generation triggered.' }) }] };
+    }
+
+    case 'trigger_post_booking_flow': {
+      const resp = await new Promise((resolve, reject) => {
+        const req2 = require('http').request({
+          hostname: 'localhost', port: cfg.PORT || 3000,
+          path: `/api/bookings/${args.bookingId}/trigger-content`,
+          method: 'POST', headers: { 'Content-Type': 'application/json' }
+        }, res2 => {
+          let data = '';
+          res2.on('data', d => data += d);
+          res2.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ raw: data }); } });
+        });
+        req2.on('error', reject);
+        req2.end();
+      });
+      return { content:[{ type:'text', text: JSON.stringify(resp) }] };
+    }
+
+    case 'list_booking_events': {
+      const { bookings: bkgs2 } = require('../orchestrator/memory');
+      const list = bkgs2.getRecent(args.limit || 20);
+      return { content:[{ type:'text', text: JSON.stringify(list, null, 2) }] };
+    }
+
 
     default:
       throw new Error('Unknown tool: ' + name);

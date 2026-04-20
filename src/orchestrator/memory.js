@@ -257,3 +257,111 @@ try {
 } catch (e) { console.error('[DB] Integrity check failed:', e.message); }
 
 module.exports = { log, auditLog, state, db, encrypt, decrypt };
+
+// ─── ROTATION STATUS ──────────────────────────────────────────────────────────
+// Returns per-destination stats: lastPosted, count7d, count30d, priority (lower = needs posting sooner)
+const rotationStatus = {
+  get(allDests) {
+    return allDests.map(dest => {
+      const r7  = db.prepare(`SELECT COUNT(*) as c FROM content_log WHERE destination=? AND created > datetime('now','-7 days')  AND deleted_at IS NULL`).get(dest);
+      const r30 = db.prepare(`SELECT COUNT(*) as c FROM content_log WHERE destination=? AND created > datetime('now','-30 days') AND deleted_at IS NULL`).get(dest);
+      const last = db.prepare(`SELECT created FROM content_log WHERE destination=? AND deleted_at IS NULL ORDER BY created DESC LIMIT 1`).get(dest);
+      const daysSince = last
+        ? Math.floor((Date.now() - new Date(last.created + 'Z').getTime()) / 86400000)
+        : 999;
+      return {
+        destination: dest,
+        lastPosted:  last ? last.created : null,
+        daysSince,
+        count7d:     r7.c,
+        count30d:    r30.c,
+        priority:    daysSince   // higher = posted longer ago = more urgent
+      };
+    }).sort((a, b) => b.priority - a.priority);
+  }
+};
+
+// ─── DUPLICATE CHECK ──────────────────────────────────────────────────────────
+// Returns true if a caption is too similar to any recent post (same destination, same 30-char fingerprint)
+function checkDuplicate(caption, destination, windowDays = 14) {
+  if (!caption || caption.length < 20) return { isDuplicate: false };
+  const fingerprint = caption.trim().toLowerCase().replace(/\s+/g,' ').slice(0, 40);
+  const rows = db.prepare(`
+    SELECT job_id, caption_enc, destination, created FROM content_log
+    WHERE destination=? AND created > datetime('now','-${windowDays} days') AND deleted_at IS NULL
+    ORDER BY created DESC LIMIT 50
+  `).all(destination);
+  for (const row of rows) {
+    const existing = decrypt(row.caption_enc);
+    const existingFp = existing.trim().toLowerCase().replace(/\s+/g,' ').slice(0, 40);
+    if (existingFp === fingerprint) {
+      return { isDuplicate: true, matchedJobId: row.job_id, matchedAt: row.created };
+    }
+  }
+  return { isDuplicate: false };
+}
+
+// ─── BOOKINGS TABLE ──────────────────────────────────────────────────────────
+if (!DB_READONLY) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      booking_id   TEXT UNIQUE,
+      created      TEXT DEFAULT (datetime('now')),
+      source       TEXT DEFAULT 'manual',
+      guest_name   TEXT,
+      guest_email  TEXT,
+      destination  TEXT,
+      package_name TEXT,
+      travel_date  TEXT,
+      party_size   INTEGER DEFAULT 1,
+      notes        TEXT,
+      content_triggered INTEGER DEFAULT 0,
+      content_job_id    TEXT,
+      meta         TEXT DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_bookings_created ON bookings(created DESC);
+    CREATE INDEX IF NOT EXISTS idx_bookings_destination ON bookings(destination);
+  `);
+}
+
+const bookings = {
+  insert(r) {
+    const id = 'bkg_' + require('crypto').randomBytes(4).toString('hex');
+    db.prepare(`
+      INSERT OR IGNORE INTO bookings
+        (booking_id, source, guest_name, guest_email, destination, package_name, travel_date, party_size, notes, meta)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      r.bookingId || id,
+      r.source       || 'manual',
+      r.guestName    || '',
+      r.guestEmail   || '',
+      r.destination  || '',
+      r.packageName  || '',
+      r.travelDate   || '',
+      r.partySize    || 1,
+      r.notes        || '',
+      JSON.stringify(r.meta || {})
+    );
+    audit('INSERT', 'bookings', r.bookingId || id, { destination: r.destination, source: r.source });
+    return r.bookingId || id;
+  },
+
+  markContentTriggered(bookingId, contentJobId) {
+    db.prepare(`UPDATE bookings SET content_triggered=1, content_job_id=? WHERE booking_id=?`).run(contentJobId, bookingId);
+    audit('CONTENT_TRIGGERED', 'bookings', bookingId, { contentJobId });
+  },
+
+  getRecent(n = 20) {
+    return db.prepare(`SELECT * FROM bookings ORDER BY created DESC LIMIT ?`).all(n)
+      .map(r => ({ ...r, meta: JSON.parse(r.meta || '{}') }));
+  },
+
+  getById(bookingId) {
+    const r = db.prepare(`SELECT * FROM bookings WHERE booking_id=?`).get(bookingId);
+    return r ? { ...r, meta: JSON.parse(r.meta || '{}') } : null;
+  }
+};
+
+module.exports = { log, auditLog, state, db, encrypt, decrypt, rotationStatus, checkDuplicate, bookings };
