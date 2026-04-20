@@ -42,8 +42,10 @@ module.exports = {
   PEXELS_KEY:   process.env.PEXELS_API_KEY || '',
   UPLOADS_DIR:  path.join(ROOT, process.env.UPLOADS_DIR || 'uploads'),
   POSTS_DIR:    path.join(ROOT, 'posts'),
-  OUTPUTS_DIR:  path.join(ROOT, process.env.OUTPUTS_DIR || 'outputs'),
-  ASSETS_DIR:   path.join(ROOT, process.env.ASSETS_DIR  || 'assets'),
+  OUTPUTS_DIR:     path.join(ROOT, process.env.OUTPUTS_DIR || 'outputs'),
+  MCP_OUTPUTS_DIR: path.join(ROOT, process.env.MCP_OUTPUTS_DIR || 'outputs/mcp'),
+  UI_OUTPUTS_DIR:  path.join(ROOT, process.env.UI_OUTPUTS_DIR  || 'outputs/ui'),
+  ASSETS_DIR:      path.join(ROOT, process.env.ASSETS_DIR || 'assets'),
   DB_PATH:      path.isAbsolute(process.env.DB_PATH || '')
                   ? process.env.DB_PATH
                   : path.join(ROOT, process.env.DB_PATH || 'lavira.db'),
