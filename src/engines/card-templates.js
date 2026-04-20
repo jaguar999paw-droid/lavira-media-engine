@@ -15,7 +15,7 @@ const { resolvePostData } = require('./post-defaults');
 const C = {
   green:'#2D6A4F', greenDark:'#1B4332', greenLight:'#40916C',
   amber:'#F4A261', amberDark:'#E07A2F', amberLight:'#FBBF77',
-  dark:'#0A1612',  dark2:'#0F1C17',
+  dark:'#1B2830',  dark2:'#0F1C17',
   white:'#FFFFFF',  cream:'#FEF9EF',
   grayMid:'#9fd3aa', grayDim:'#6B8F71',
 };
@@ -41,7 +41,7 @@ function logoPill(w, h) {
   const cy = Math.round(h * 0.038) + r;
   const pillW = Math.round(w * 0.40);
   const pillH = r * 2 + Math.round(r * 0.4);
-  return '<rect x="' + Math.round(w*0.04) + '" y="' + Math.round(h*0.025) + '" width="' + pillW + '" height="' + pillH + '" rx="' + r + '" fill="' + C.dark + '" opacity="0.82"/>' +
+  return '<rect x="' + Math.round(w*0.04) + '" y="' + Math.round(h*0.025) + '" width="' + pillW + '" height="' + pillH + '" rx="' + r + '" fill="' + C.dark + '" opacity="0.68"/>' +
     '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + C.amber + '"/>' +
     '<text x="' + cx + '" y="' + (cy+Math.round(r*0.38)) + '" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="' + Math.round(r*1.1) + '" font-weight="900" fill="' + C.dark + '">L</text>' +
     '<text x="' + (cx+r+Math.round(w*0.014)) + '" y="' + (cy+Math.round(r*0.38)) + '" font-family="Arial Black,Arial,sans-serif" font-size="' + Math.round(r*0.85) + '" font-weight="900" fill="' + C.white + '" letter-spacing="0.5">' + esc(BN) + '</text>';
@@ -84,7 +84,7 @@ function verticalBrand(w, h, topH) {
 }
 
 function familyBHeader(w, h, topH, label) {
-  return '<rect x="0" y="0" width="' + w + '" height="' + topH + '" fill="' + C.dark + '" opacity="0.95"/>' +
+  return '<rect x="0" y="0" width="' + w + '" height="' + topH + '" fill="' + C.dark + '" opacity="0.88"/>' +
     '<rect x="0" y="' + topH + '" width="' + w + '" height="3" fill="' + C.amber + '" opacity="0.8"/>' +
     '<text x="' + Math.round(w*0.07) + '" y="' + Math.round(topH*0.68) + '" font-family="Arial Black,Arial,sans-serif" font-size="' + Math.round(topH*0.40) + '" font-weight="900" fill="' + C.amber + '">' + esc(label) + '</text>';
 }
