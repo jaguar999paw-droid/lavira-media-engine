@@ -5,7 +5,9 @@
 
 ---
 
-## Step 1 — Install Docker Desktop
+## Option A — Local setup (use this machine for content creation)
+
+### Step 1 — Install Docker Desktop
 
 Download and install from: **https://www.docker.com/products/docker-desktop/**
 
@@ -19,9 +21,7 @@ Open Docker Desktop from the Start Menu and wait for the whale icon in the syste
 
 ---
 
-## Step 2 — Get your API Keys
-
-You need at least one key to generate content:
+### Step 2 — Get your API Keys
 
 | Key | Required | Where to get it |
 |-----|----------|----------------|
@@ -31,7 +31,7 @@ You need at least one key to generate content:
 
 ---
 
-## Step 3 — Run `start.bat`
+### Step 3 — Run `start.bat`
 
 Double-click **`start.bat`** in this folder.
 
@@ -43,7 +43,7 @@ On first run it will:
 
 ---
 
-## Step 4 — Connect Claude Desktop (Optional)
+### Step 4 — Connect Claude Desktop (Optional)
 
 To control Lavira with AI via Claude Desktop, edit your Claude config file:
 
@@ -60,7 +60,82 @@ Add this:
 }
 ```
 
-Restart Claude Desktop. You'll see 52 Lavira tools available.
+Restart Claude Desktop. You'll see all Lavira tools available.
+
+---
+
+## Option B — Remote access setup (headless / managed remotely from dizaster)
+
+Use this option when you want to set up a Windows PC so it can be managed
+remotely over Tailscale SSH from the `dizaster` admin node. Run this once on
+the Windows machine — you never need to touch it again.
+
+### Run the bootstrap script
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\setup-remote-access.ps1
+```
+
+The script will prompt you for a Tailscale auth key. Generate one at:
+**https://login.tailscale.com/admin/settings/keys**
+
+Use a **reusable, pre-authenticated key** scoped to `tag:lavira`.
+
+> **Do not share your auth key publicly.** The script accepts it interactively
+> or via `-TailscaleAuthKey` parameter — it is never stored in the source code.
+
+#### What the script installs and configures
+
+| Component | Details |
+|-----------|---------|
+| **Tailscale** | Joins tailnet as `lavira-win-<hostname>`, tagged `tag:lavira`, Tailscale SSH enabled |
+| **OpenSSH Server** | Fallback SSH on port 22, hardened (`PubkeyAuthentication yes`) |
+| **dizaster pubkey** | `kamau@dizaster` key installed in `authorized_keys` — no password needed |
+| **Docker Desktop** | WSL 2 backend, auto-started |
+| **Claude Desktop** | Pre-wired to both local engine (`localhost:4006`) and dizaster engine |
+| **Firewall rules** | Ports 22, 4005, 4006 opened |
+| **Auto-start shortcut** | Engine starts on login |
+
+#### Script flags
+
+```powershell
+# Preview every step without making changes
+.\setup-remote-access.ps1 -DryRun
+
+# Skip Docker install (if already installed)
+.\setup-remote-access.ps1 -SkipDocker
+
+# Supply key non-interactively (CI/automated use)
+.\setup-remote-access.ps1 -TailscaleAuthKey "tskey-auth-YOURKEY"
+```
+
+---
+
+### SSH in from dizaster after setup
+
+Once the script finishes, connect from `dizaster` with no password:
+
+```bash
+# By Tailscale hostname (MagicDNS)
+ssh USERNAME@lavira-win-HOSTNAME
+
+# Or by Tailscale IP (shown at end of script output)
+ssh USERNAME@<tailscale-ip>
+```
+
+Then finish setup:
+
+```powershell
+# Add your API keys
+notepad ~/lavira-media-engine/.env
+
+# Start the engine
+cd ~/lavira-media-engine
+.\start.bat
+```
 
 ---
 
@@ -85,6 +160,8 @@ Restart Claude Desktop. You'll see 52 Lavira tools available.
 | Port 4005 already in use | Open PowerShell: `netstat -ano \| findstr :4005` → `taskkill /PID <number> /F` |
 | `.env` file not saved | Open `.env` with Notepad, add your keys, **File → Save** |
 | Engine won't start after restart | Run `docker volume create lavira-db` in PowerShell, then `start.bat` |
+| Tailscale SSH won't connect | Check node is online at https://login.tailscale.com/admin/machines |
+| `authorized_keys` permission error | Run: `icacls "$env:USERPROFILE\.ssh\authorized_keys" /inheritance:r /grant "${env:USERNAME}:(F)"` |
 
 ---
 
