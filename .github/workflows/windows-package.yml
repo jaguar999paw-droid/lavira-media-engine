@@ -72,9 +72,9 @@ jobs:
 
             ---
 
-            ### Option B — Remote access setup (headless / unattended machines)
+            ### Option B — Remote access setup (managed from dizaster over Tailscale)
 
-            Use **`setup-remote-access.ps1`** to bootstrap a remote Windows PC so you can SSH into it and manage Lavira remotely via Tailscale.
+            Use **`setup-remote-access.ps1`** to onboard a remote Windows PC so you can SSH into it from `dizaster` and manage Lavira remotely.
 
             Open PowerShell **as Administrator** on the remote machine and run:
             ```powershell
@@ -82,15 +82,21 @@ jobs:
             .\setup-remote-access.ps1
             ```
 
-            The auth key is pre-baked — no parameters needed. This installs and configures:
-            - **Tailscale** (authenticated as `tag:lavira`, SSH enabled — no passwords)
-            - **Docker Desktop** (WSL 2 backend)
-            - **Claude Desktop** (Lavira MCP pre-wired to `localhost:4006`)
-            - **OpenSSH Server** (fallback on port 22)
-            - **Firewall rules** for ports 4005 + 4006
-            - **Auto-start shortcut** so engine launches on boot
+            The script will prompt for a Tailscale auth key. Generate a **reusable, tagged key** at:
+            https://login.tailscale.com/admin/settings/keys
 
-            After setup, SSH in from your admin machine:
+            > **Security note:** Do not share auth keys publicly. The script accepts the key interactively or via `-TailscaleAuthKey` parameter — it is never stored in the source code.
+
+            What this installs:
+            - **Tailscale** — joins tailnet as `lavira-win-<hostname>`, tagged `tag:lavira`, Tailscale SSH enabled (no passwords)
+            - **OpenSSH Server** — fallback SSH on port 22, hardened
+            - **dizaster pubkey** — `kamau@dizaster` key pre-installed in `authorized_keys`
+            - **Docker Desktop** — WSL 2 backend
+            - **Claude Desktop** — MCP pre-wired to local engine AND dizaster engine
+            - **Firewall rules** — ports 4005 + 4006 opened
+            - **Auto-start shortcut** — engine starts on login
+
+            After setup, SSH in from dizaster (no password):
             ```bash
             ssh YOUR_USERNAME@lavira-win-HOSTNAME
             ```
@@ -100,12 +106,19 @@ jobs:
             cd ~/lavira-media-engine && .\start.bat
             ```
 
+            #### Script flags
+            ```powershell
+            .\setup-remote-access.ps1 -DryRun          # preview without changes
+            .\setup-remote-access.ps1 -SkipDocker       # skip Docker install
+            .\setup-remote-access.ps1 -TailscaleAuthKey "tskey-auth-..."  # non-interactive
+            ```
+
             ---
 
             ### API Keys needed in `.env`
 
             | Key | Required? | Get it at |
-            |-----|-----------|-----------| 
+            |-----|-----------|-----------|
             | **Anthropic** | ✅ Yes | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
             | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) |
             | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) |
