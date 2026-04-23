@@ -18,24 +18,26 @@ jobs:
 
       - name: Build Windows setup ZIP
         run: |
-          # Create a staging directory with everything a Windows user needs
           mkdir -p staging
 
-          # Core files at root level
+          # Core engine files
           cp docker-compose.yml       staging/
           cp .env.example             staging/
           cp Dockerfile               staging/
 
-          # Windows-specific files (start.bat + guide) go directly in root
-          cp windows/start.bat        staging/
-          cp windows/SETUP.md         staging/
+          # Windows helpers (root of ZIP)
+          cp windows/start.bat                staging/
+          cp windows/SETUP.md                 staging/
+          cp windows/setup-remote-access.ps1  staging/
 
-          # Make the zip — name matches exactly what the README says
+          echo "ZIP contents:"
+          ls -lah staging/
+
           cd staging
           zip -r ../lavira-media-engine-windows-setup.zip .
           cd ..
 
-          echo "ZIP contents:"
+          echo "Final ZIP:"
           unzip -l lavira-media-engine-windows-setup.zip
 
       - name: Upload artifact
@@ -57,32 +59,58 @@ jobs:
 
             | File | Platform | Instructions |
             |------|----------|-------------|
-            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** | Extract → double-click `start.bat` → done |
+            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** | Extract → see below |
             | `Source code (zip)` | All | For developers |
 
             ---
 
-            ### Windows Quick Start (3 steps)
+            ### Option A — Local setup (double-click)
 
-            **1.** Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) — restart your PC after.
+            **1.** Extract the ZIP anywhere (e.g. `C:\LaviraMedia\`).
 
-            **2.** Extract `lavira-media-engine-windows-setup.zip` anywhere (e.g. `C:\LaviraMedia\`).
-
-            **3.** Double-click **`start.bat`**.
-
-            On first run it opens Notepad for your API keys, then launches the full Lavira studio at **http://localhost:4005** and opens it in your browser automatically.
+            **2.** Double-click **`start.bat`** — installs Docker, pulls images, opens studio at **http://localhost:4005**.
 
             ---
 
-            ### API Keys
+            ### Option B — Remote access setup (headless / unattended machines)
+
+            Use **`setup-remote-access.ps1`** to bootstrap a remote Windows PC so you can SSH into it and manage Lavira remotely via Tailscale.
+
+            Open PowerShell **as Administrator** on the remote machine and run:
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            .\setup-remote-access.ps1
+            ```
+
+            The auth key is pre-baked — no parameters needed. This installs and configures:
+            - **Tailscale** (authenticated as `tag:lavira`, SSH enabled — no passwords)
+            - **Docker Desktop** (WSL 2 backend)
+            - **Claude Desktop** (Lavira MCP pre-wired to `localhost:4006`)
+            - **OpenSSH Server** (fallback on port 22)
+            - **Firewall rules** for ports 4005 + 4006
+            - **Auto-start shortcut** so engine launches on boot
+
+            After setup, SSH in from your admin machine:
+            ```bash
+            ssh YOUR_USERNAME@lavira-win-HOSTNAME
+            ```
+            Then finish:
+            ```powershell
+            notepad ~/lavira-media-engine/.env   # add ANTHROPIC_API_KEY
+            cd ~/lavira-media-engine && .\start.bat
+            ```
+
+            ---
+
+            ### API Keys needed in `.env`
 
             | Key | Required? | Get it at |
-            |-----|-----------|-----------|
+            |-----|-----------|-----------| 
             | **Anthropic** | ✅ Yes | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
-            | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) — free |
-            | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) — free |
+            | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) |
+            | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) |
 
-            See **`SETUP.md`** inside the zip for the full guide including Claude Desktop MCP setup and troubleshooting.
+            See **`SETUP.md`** for the full guide including Claude Desktop MCP setup and troubleshooting.
 
             ---
 
