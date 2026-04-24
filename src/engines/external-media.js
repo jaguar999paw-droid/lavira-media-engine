@@ -279,7 +279,7 @@ async function fetchOptimalMedia(query, options = {}) {
     });
 
     if (pexelsResult.photos && pexelsResult.photos.length > 0) {
-      results = pexelsResult.photos.map(p => ({ ...p, _lavira: { query: intelligentQuery, destination, theme, type: 'image', source: 'pexels' } }));
+      results = pexelsResult.photos;
       source = 'pexels';
     }
   } else if (type === 'video') {
@@ -299,8 +299,7 @@ async function fetchOptimalMedia(query, options = {}) {
           large: video.video_files.find(f => f.quality === 'hd')?.link || video.video_files[0]?.link
         },
         duration: video.duration,
-        photographer: video.user.name,
-        _lavira: { query: intelligentQuery, destination, theme, type: 'video', source: 'pexels' }
+        photographer: video.user.name
       }));
       source = 'pexels';
     }
@@ -314,7 +313,7 @@ async function fetchOptimalMedia(query, options = {}) {
     });
 
     if (unsplashResult.photos && unsplashResult.photos.length > 0) {
-      results = unsplashResult.photos.map(p => ({ ...p, _lavira: { query: intelligentQuery, destination, theme, type: 'image', source: 'unsplash' } }));
+      results = unsplashResult.photos;
       source = 'unsplash';
     }
   }
@@ -373,10 +372,9 @@ async function downloadAndCacheMedia(mediaItem, type = 'image') {
     }).on('error', (err) => { fs.unlinkSync(filepath); reject(err); });
   });
 
-  // Register in cache index (so future fetchOptimalMedia can hit cache)
-  const meta = mediaItem._lavira || {};
-  mediaCache.set(meta.query || '', meta.destination || '', meta.theme || '', filepath, url, {
-    source: meta.source || mediaItem.source || 'pexels',
+  // Register in cache index
+  mediaCache.set('', '', '', filepath, url, {
+    source: mediaItem.source || 'pexels',
     photographer: mediaItem.photographer,
     id: mediaItem.id
   });
