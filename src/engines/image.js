@@ -5,17 +5,18 @@ const path  = require('path');
 const fs    = require('fs');
 const { v4: uuid } = require('uuid');
 const cfg   = require('../config');
+const BRAND = require('../orchestrator/brand');
 
 const PROFILES = {
-  instagram_post:   { w:1080, h:1080, label:'Instagram Post (1:1)'     },
-  instagram_story:  { w:1080, h:1920, label:'Instagram Story (9:16)'   },
-  instagram_portrait:{ w:1080,h:1350, label:'Instagram Portrait (4:5)' },
-  facebook_feed:    { w:1200, h:630,  label:'Facebook Feed'            },
-  facebook_story:   { w:1080, h:1920, label:'Facebook Story'           },
-  twitter_card:     { w:1200, h:628,  label:'Twitter Card'             },
-  youtube_thumb:    { w:1280, h:720,  label:'YouTube Thumbnail'        },
-  linkedin:         { w:1200, h:627,  label:'LinkedIn Post'            },
-  original:         { w:null, h:null, label:'Original Size'            },
+  instagram_post:    { w:1080, h:1080, label:'Instagram Post (1:1)'     },
+  instagram_story:   { w:1080, h:1920, label:'Instagram Story (9:16)'   },
+  instagram_portrait:{ w:1080, h:1350, label:'Instagram Portrait (4:5)' },
+  facebook_feed:     { w:1200, h:630,  label:'Facebook Feed'            },
+  facebook_story:    { w:1080, h:1920, label:'Facebook Story'           },
+  twitter_card:      { w:1200, h:628,  label:'Twitter Card'             },
+  youtube_thumb:     { w:1280, h:720,  label:'YouTube Thumbnail'        },
+  linkedin:          { w:1200, h:627,  label:'LinkedIn Post'            },
+  original:          { w:null, h:null, label:'Original Size'            },
 };
 
 // Manual edits applied before platform resize
@@ -64,11 +65,13 @@ async function applyManualEdits(sharpInstance, edits = {}) {
 function brandWatermark(w, h, destination = '') {
   const fontSize  = Math.round(w * 0.020);
   const barHeight = Math.round(h * 0.055);
+  const website   = (BRAND.website || '').replace('https://', '').toUpperCase();
+  const phone     = BRAND.phone || '';
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
     <rect x="0" y="${h - barHeight}" width="${w}" height="${barHeight}" fill="rgba(0,0,0,0.55)"/>
     <text x="${w/2}" y="${h - barHeight*0.52}" text-anchor="middle"
           font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold"
-          fill="white" opacity="0.92">${BRAND.website.replace("https://","").toUpperCase()} • ${BRAND.phone}</text>
+          fill="white" opacity="0.92">${website} • ${phone}</text>
     ${destination ? `<text x="${w/2}" y="${h - barHeight*0.15}" text-anchor="middle"
           font-family="Arial,sans-serif" font-size="${Math.round(fontSize*0.8)}"
           fill="#F4A261" opacity="0.9">${destination}</text>` : ''}
