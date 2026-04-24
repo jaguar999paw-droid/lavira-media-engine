@@ -20,15 +20,17 @@ jobs:
         run: |
           mkdir -p staging
 
-          # Core engine files
-          cp docker-compose.yml       staging/
-          cp .env.example             staging/
-          cp Dockerfile               staging/
+          # ── Core engine files ──────────────────────────────────────────────
+          cp docker-compose.yml   staging/
+          cp .env.example         staging/
+          cp Dockerfile           staging/
 
-          # Windows helpers (root of ZIP)
-          cp windows/start.bat                staging/
-          cp windows/SETUP.md                 staging/
-          cp windows/setup-remote-access.ps1  staging/
+          # ── Windows launcher + setup scripts ──────────────────────────────
+          cp windows/Install-Lavira.bat          staging/
+          cp windows/start.bat                   staging/
+          cp windows/setup-remote-access.ps1     staging/
+          cp windows/SETUP.md                    staging/
+          cp windows/keys.env.example            staging/
 
           echo "ZIP contents:"
           ls -lah staging/
@@ -57,65 +59,63 @@ jobs:
 
             ### ⬇️ Download
 
-            | File | Platform | Instructions |
-            |------|----------|-------------|
-            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** | Extract → see below |
-            | `Source code (zip)` | All | For developers |
+            | File | Platform |
+            |------|----------|
+            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** |
+            | `Source code (zip)` | Developers |
 
             ---
 
-            ### Option A — Local setup (double-click)
+            ### Option A — Interactive local install (double-click)
 
-            **1.** Extract the ZIP anywhere (e.g. `C:\LaviraMedia\`).
-
-            **2.** Double-click **`start.bat`** — installs Docker, pulls images, opens studio at **http://localhost:4005**.
+            1. Extract the ZIP anywhere (e.g. `C:\LaviraMedia\`)
+            2. Double-click **`Install-Lavira.bat`** — fully automated
+               - Installs Docker Desktop, Claude Desktop, Tailscale
+               - Downloads the engine
+               - Opens settings file once to enter your Anthropic API key
+               - Auto-starts the engine and opens your browser
 
             ---
 
-            ### Option B — Remote access setup (managed from dizaster over Tailscale)
+            ### Option B — Zero-touch deploy (pre-filled keys, no prompts at all)
 
-            Use **`setup-remote-access.ps1`** to onboard a remote Windows PC so you can SSH into it from `dizaster` and manage Lavira remotely.
+            For deploying to a machine where you want zero user interaction:
 
-            Open PowerShell **as Administrator** on the remote machine and run:
+            1. Extract the ZIP
+            2. Copy `keys.env.example` → `keys.env` in the same folder
+            3. Fill in `ANTHROPIC_API_KEY=sk-ant-...` (and optional keys)
+            4. Double-click **`Install-Lavira.bat`** — setup reads keys silently, no Notepad
+
+            ---
+
+            ### Option C — Remote access setup (SSH from dizaster over Tailscale)
+
+            For managing the engine remotely from `kamau@dizaster`:
+
+            Open PowerShell **as Administrator** on the Windows machine and run:
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
             .\setup-remote-access.ps1
             ```
 
-            The script will prompt for a Tailscale auth key. Generate a **reusable, tagged key** at:
-            https://login.tailscale.com/admin/settings/keys
-
-            > **Security note:** Do not share auth keys publicly. The script accepts the key interactively or via `-TailscaleAuthKey` parameter — it is never stored in the source code.
-
-            What this installs:
-            - **Tailscale** — joins tailnet as `lavira-win-<hostname>`, tagged `tag:lavira`, Tailscale SSH enabled (no passwords)
-            - **OpenSSH Server** — fallback SSH on port 22, hardened
-            - **dizaster pubkey** — `kamau@dizaster` key pre-installed in `authorized_keys`
-            - **Docker Desktop** — WSL 2 backend
-            - **Claude Desktop** — MCP pre-wired to local engine AND dizaster engine
-            - **Firewall rules** — ports 4005 + 4006 opened
+            The auth key is pre-baked. This installs and configures:
+            - **Tailscale** — joins tailnet as `tag:lavira`, Tailscale SSH enabled
+            - **OpenSSH Server** — fallback SSH on port 22
+            - **dizaster pubkey** — `kamau@dizaster` pre-authorised in `authorized_keys`
+            - **Docker Desktop** + WSL2
+            - **Claude Desktop** — MCP wired to local engine AND dizaster engine
+            - **Firewall rules** for ports 4005 + 4006
             - **Auto-start shortcut** — engine starts on login
 
-            After setup, SSH in from dizaster (no password):
+            After setup, SSH in from dizaster:
             ```bash
             ssh YOUR_USERNAME@lavira-win-HOSTNAME
-            ```
-            Then finish:
-            ```powershell
-            notepad ~/lavira-media-engine/.env   # add ANTHROPIC_API_KEY
             cd ~/lavira-media-engine && .\start.bat
-            ```
-
-            #### Script flags
-            ```powershell
-            .\setup-remote-access.ps1 -DryRun          # preview without changes
-            .\setup-remote-access.ps1 -SkipDocker       # skip Docker install
-            .\setup-remote-access.ps1 -TailscaleAuthKey "tskey-auth-..."  # non-interactive
             ```
 
             ---
 
-            ### API Keys needed in `.env`
+            ### API Keys
 
             | Key | Required? | Get it at |
             |-----|-----------|-----------|
@@ -123,7 +123,7 @@ jobs:
             | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) |
             | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) |
 
-            See **`SETUP.md`** for the full guide including Claude Desktop MCP setup and troubleshooting.
+            See **`SETUP.md`** inside the ZIP for the full guide.
 
             ---
 
