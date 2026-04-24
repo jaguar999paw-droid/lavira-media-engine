@@ -17,6 +17,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Windows setup ZIP
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
+          GIPHY_API_KEY:     ${{ secrets.GIPHY_API_KEY }}
         run: |
           mkdir -p staging
 
@@ -32,15 +36,23 @@ jobs:
           cp windows/SETUP.md                    staging/
           cp windows/keys.env.example            staging/
 
+          # ── Inject live API keys → keys.env (never stored in git) ─────────
+          cat > staging/keys.env << EOF
+          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+          PEXELS_API_KEY=${PEXELS_API_KEY}
+          GIPHY_API_KEY=${GIPHY_API_KEY}
+          EOF
+          # Strip leading whitespace from heredoc
+          sed -i 's/^[[:space:]]*//' staging/keys.env
+
           echo "ZIP contents:"
           ls -lah staging/
+          echo "keys.env preview (keys masked):"
+          sed 's/=.*/=***/' staging/keys.env
 
           cd staging
           zip -r ../lavira-media-engine-windows-setup.zip .
           cd ..
-
-          echo "Final ZIP:"
-          unzip -l lavira-media-engine-windows-setup.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -66,66 +78,39 @@ jobs:
 
             ---
 
-            ### Option A — Interactive local install (double-click)
+            ### Install — no configuration needed
 
-            1. Extract the ZIP anywhere (e.g. `C:\LaviraMedia\`)
-            2. Double-click **`Install-Lavira.bat`** — fully automated
-               - Installs Docker Desktop, Claude Desktop, Tailscale
-               - Downloads the engine
-               - Opens settings file once to enter your Anthropic API key
-               - Auto-starts the engine and opens your browser
+            1. Extract `lavira-media-engine-windows-setup.zip` anywhere
+            2. Double-click **`Install-Lavira.bat`**
+            3. Click **Yes** when Windows asks for permission
+            4. Wait ~10 minutes — everything installs automatically
+            5. Your browser opens to the Lavira studio at **http://localhost:4005**
 
-            ---
+            > API keys are pre-configured. No Notepad, no prompts.
 
-            ### Option B — Zero-touch deploy (pre-filled keys, no prompts at all)
-
-            For deploying to a machine where you want zero user interaction:
-
-            1. Extract the ZIP
-            2. Copy `keys.env.example` → `keys.env` in the same folder
-            3. Fill in `ANTHROPIC_API_KEY=sk-ant-...` (and optional keys)
-            4. Double-click **`Install-Lavira.bat`** — setup reads keys silently, no Notepad
+            **If your computer needs to restart** during install — let it. Lavira starts automatically after the reboot.
 
             ---
 
-            ### Option C — Remote access setup (SSH from dizaster over Tailscale)
+            ### To start Lavira after the first install
 
-            For managing the engine remotely from `kamau@dizaster`:
+            Double-click **`start.bat`** in the extracted folder.
 
-            Open PowerShell **as Administrator** on the Windows machine and run:
-            ```powershell
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            .\setup-remote-access.ps1
-            ```
+            ---
 
-            The auth key is pre-baked. This installs and configures:
-            - **Tailscale** — joins tailnet as `tag:lavira`, Tailscale SSH enabled
-            - **OpenSSH Server** — fallback SSH on port 22
-            - **dizaster pubkey** — `kamau@dizaster` pre-authorised in `authorized_keys`
-            - **Docker Desktop** + WSL2
-            - **Claude Desktop** — MCP wired to local engine AND dizaster engine
-            - **Firewall rules** for ports 4005 + 4006
-            - **Auto-start shortcut** — engine starts on login
+            ### Remote access (for admin via Tailscale SSH)
 
-            After setup, SSH in from dizaster:
+            The setup script automatically joins the machine to the Lavira tailnet as `tag:lavira` with SSH enabled. From `dizaster`:
             ```bash
             ssh YOUR_USERNAME@lavira-win-HOSTNAME
-            cd ~/lavira-media-engine && .\start.bat
+            # Update keys any time:
+            nano ~/lavira-media-engine/.env
+            docker compose -f ~/lavira-media-engine/docker-compose.yml restart
             ```
 
             ---
 
-            ### API Keys
-
-            | Key | Required? | Get it at |
-            |-----|-----------|-----------|
-            | **Anthropic** | ✅ Yes | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
-            | **Pexels** | Optional | [pexels.com/api](https://www.pexels.com/api/) |
-            | **GIPHY** | Optional | [developers.giphy.com](https://developers.giphy.com/) |
-
-            See **`SETUP.md`** inside the ZIP for the full guide.
-
-            ---
+            See **`SETUP.md`** inside the ZIP for full details.
 
             **Docs:** [github.com/jaguar999paw-droid/lavira-media-engine](https://github.com/jaguar999paw-droid/lavira-media-engine)
           files: lavira-media-engine-windows-setup.zip
