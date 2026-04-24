@@ -14,7 +14,7 @@
       4. Connects to the Lavira network (background, no user interaction)
       5. Writes Claude Desktop MCP config
       6. Downloads and extracts Lavira engine files
-      7. Reads API keys from keys.env (if present) — else opens Notepad once
+      7. Reads API keys from keys.env (searched in multiple locations)
       8. Schedules start.bat to run after any required reboot
 
 .PARAMETER Silent
@@ -22,12 +22,18 @@
 
 .PARAMETER LaviraVersion
     Release tag to download. Defaults to "latest".
+
+.PARAMETER ScriptDir
+    Optional: directory where Install-Lavira.bat lives. Used to locate
+    keys.env when this script is run from a different folder (e.g. when
+    downloaded on-the-fly to a temp directory by Install-Lavira.bat).
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Silent,
-    [string]$LaviraVersion = "latest"
+    [string]$LaviraVersion = "latest",
+    [string]$ScriptDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,7 +47,17 @@ $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"
 $CLAUDE_CONFIG   = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $TAILSCALE_EXE   = "C:\Program Files\Tailscale\tailscale.exe"
 $REBOOT_FLAG     = Join-Path $env:TEMP "lavira_needs_reboot.flag"
-$SCRIPT_DIR      = Split-Path -Parent $PSCommandPath
+
+# $SCRIPT_DIR: prefer the -ScriptDir arg (passed by Install-Lavira.bat so keys.env
+# is found even when this PS1 was downloaded to a temp folder), then fall back to
+# the PS1's own directory.
+$SCRIPT_DIR = if ($ScriptDir -and (Test-Path $ScriptDir)) {
+    $ScriptDir.TrimEnd('\','/')
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} else {
+    $PWD.Path
+}
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 $step = 0
@@ -221,9 +237,9 @@ if (-not $engineReady) {
 
 # ── STEP 7: .env + API keys ───────────────────────────────────────────────────
 # Priority:
-#   1. keys.env alongside this script  → read silently, zero interaction needed
+#   1. keys.env searched in multiple locations (script dir, BAT dir, Desktop, Downloads)
 #   2. ANTHROPIC_API_KEY already in .env → skip
-#   3. Notepad prompt                  → fallback for interactive installs
+#   3. Notepad prompt → fallback for interactive installs
 Step "Setting up API keys"
 $envFile    = Join-Path $LAVIRA_DIR ".env"
 $envExample = Join-Path $LAVIRA_DIR ".env.example"
@@ -248,15 +264,23 @@ FACEBOOK_PAGE_ID=
     }
 }
 
-# ── 7a. Try to read from keys.env (pre-filled by deployer, lives next to script)
-$keysEnvPath = Join-Path $SCRIPT_DIR "keys.env"
+# ── 7a. Search for keys.env in multiple common locations ─────────────────────
+#  Non-technical users may have received keys.env separately (email/WhatsApp).
+#  Check common landing spots so they just need to put the file anywhere obvious.
+$keysSearchPaths = @(
+    (Join-Path $SCRIPT_DIR       "keys.env"),   # same folder as BAT/PS1
+    (Join-Path $env:USERPROFILE  "Desktop\keys.env"),
+    (Join-Path $env:USERPROFILE  "Downloads\keys.env"),
+    (Join-Path $env:USERPROFILE  "Documents\keys.env"),
+    (Join-Path $LAVIRA_DIR       "keys.env")
+)
+$keysEnvPath = $keysSearchPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
 $keysApplied = $false
-if (Test-Path $keysEnvPath) {
-    Info "Found keys.env — applying keys silently..."
-    $keysContent = Get-Content $keysEnvPath -Raw
-    $envContent  = Get-Content $envFile -Raw
 
-    # Parse each KEY=VALUE from keys.env and inject into .env (only non-empty values)
+if ($keysEnvPath) {
+    Info "Found keys.env at: $keysEnvPath — applying keys silently..."
+    $envContent = Get-Content $envFile -Raw
+
     foreach ($line in (Get-Content $keysEnvPath)) {
         $line = $line.Trim()
         if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
@@ -265,7 +289,6 @@ if (Test-Path $keysEnvPath) {
         $val   = $line.Substring($eqIdx + 1).Trim()
         if (-not $val -or $val -eq '' ) { continue }   # skip blank values
 
-        # Replace the key's value in .env (works whether line exists or not)
         if ($envContent -match "(?m)^$key=") {
             $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$val"
         } else {
@@ -277,12 +300,12 @@ if (Test-Path $keysEnvPath) {
     OK "API keys applied from keys.env"
 }
 
-# ── 7b. Check if key is now set (either from keys.env or a previous run)
+# ── 7b. Check if key is now set (either from keys.env or a previous run) ─────
 $envContent = Get-Content $envFile -Raw
 $keySet     = $envContent -match 'ANTHROPIC_API_KEY=sk-ant-'
 
 if (-not $keySet -and -not $keysApplied) {
-    # ── 7c. Notepad fallback — only if no keys.env was found and key still missing
+    # ── 7c. Notepad fallback — only if no keys.env found and key still missing
     Write-Host ""
     Write-Host "  ============================================================" -ForegroundColor Yellow
     Write-Host "   ONE ACTION REQUIRED" -ForegroundColor Yellow
