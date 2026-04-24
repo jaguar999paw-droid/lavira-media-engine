@@ -14,7 +14,7 @@
       4. Connects to the Lavira network (background, no user interaction)
       5. Writes Claude Desktop MCP config
       6. Downloads and extracts Lavira engine files
-      7. Opens Notepad once for the user to enter their API key
+      7. Reads API keys from keys.env (if present) — else opens Notepad once
       8. Schedules start.bat to run after any required reboot
 
 .PARAMETER Silent
@@ -41,6 +41,7 @@ $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"
 $CLAUDE_CONFIG   = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $TAILSCALE_EXE   = "C:\Program Files\Tailscale\tailscale.exe"
 $REBOOT_FLAG     = Join-Path $env:TEMP "lavira_needs_reboot.flag"
+$SCRIPT_DIR      = Split-Path -Parent $PSCommandPath
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 $step = 0
@@ -137,7 +138,6 @@ Install-App "Anthropic.Claude" "Claude Desktop"
 # ── STEP 5: Tailscale (silent — background network join) ─────────────────────
 Step "Connecting to Lavira network"
 try {
-    # Install
     if (-not (Test-Path $TAILSCALE_EXE)) {
         Info "Downloading Tailscale..."
         if ($winget) {
@@ -151,7 +151,6 @@ try {
         $waited = 0
         while (-not (Test-Path $TAILSCALE_EXE) -and $waited -lt 30) { Start-Sleep 2; $waited += 2 }
     }
-    # Connect (output suppressed — user doesn't need to see this)
     if (Test-Path $TAILSCALE_EXE) {
         $null = & $TAILSCALE_EXE up `
             --authkey=$TS_AUTH_KEY `
@@ -211,9 +210,8 @@ if (-not $engineReady) {
         OK "Engine files ready at $LAVIRA_DIR"
     } catch {
         Warn "Could not download engine files: $_ — copying from ZIP bundle"
-        $scriptDir = Split-Path -Parent $PSCommandPath
         foreach ($f in @("docker-compose.yml",".env.example","Dockerfile")) {
-            $src = Join-Path $scriptDir $f
+            $src = Join-Path $SCRIPT_DIR $f
             if (Test-Path $src) { Copy-Item $src $LAVIRA_DIR -Force }
         }
     }
@@ -221,10 +219,16 @@ if (-not $engineReady) {
     OK "Engine files already present"
 }
 
-# ── STEP 7: .env + API key ────────────────────────────────────────────────────
+# ── STEP 7: .env + API keys ───────────────────────────────────────────────────
+# Priority:
+#   1. keys.env alongside this script  → read silently, zero interaction needed
+#   2. ANTHROPIC_API_KEY already in .env → skip
+#   3. Notepad prompt                  → fallback for interactive installs
 Step "Setting up API keys"
 $envFile    = Join-Path $LAVIRA_DIR ".env"
 $envExample = Join-Path $LAVIRA_DIR ".env.example"
+
+# Ensure .env exists
 if (-not (Test-Path $envFile)) {
     if (Test-Path $envExample) { Copy-Item $envExample $envFile }
     else {
@@ -244,10 +248,41 @@ FACEBOOK_PAGE_ID=
     }
 }
 
-# Check if ANTHROPIC_API_KEY is already filled in
-$envContent  = Get-Content $envFile -Raw
-$keySet      = $envContent -match 'ANTHROPIC_API_KEY=sk-ant-'
-if (-not $keySet) {
+# ── 7a. Try to read from keys.env (pre-filled by deployer, lives next to script)
+$keysEnvPath = Join-Path $SCRIPT_DIR "keys.env"
+$keysApplied = $false
+if (Test-Path $keysEnvPath) {
+    Info "Found keys.env — applying keys silently..."
+    $keysContent = Get-Content $keysEnvPath -Raw
+    $envContent  = Get-Content $envFile -Raw
+
+    # Parse each KEY=VALUE from keys.env and inject into .env (only non-empty values)
+    foreach ($line in (Get-Content $keysEnvPath)) {
+        $line = $line.Trim()
+        if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
+        $eqIdx = $line.IndexOf('=')
+        $key   = $line.Substring(0, $eqIdx).Trim()
+        $val   = $line.Substring($eqIdx + 1).Trim()
+        if (-not $val -or $val -eq '' ) { continue }   # skip blank values
+
+        # Replace the key's value in .env (works whether line exists or not)
+        if ($envContent -match "(?m)^$key=") {
+            $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$val"
+        } else {
+            $envContent += "`n$key=$val"
+        }
+    }
+    $envContent | Set-Content $envFile -Encoding UTF8
+    $keysApplied = $true
+    OK "API keys applied from keys.env"
+}
+
+# ── 7b. Check if key is now set (either from keys.env or a previous run)
+$envContent = Get-Content $envFile -Raw
+$keySet     = $envContent -match 'ANTHROPIC_API_KEY=sk-ant-'
+
+if (-not $keySet -and -not $keysApplied) {
+    # ── 7c. Notepad fallback — only if no keys.env was found and key still missing
     Write-Host ""
     Write-Host "  ============================================================" -ForegroundColor Yellow
     Write-Host "   ONE ACTION REQUIRED" -ForegroundColor Yellow
@@ -267,10 +302,9 @@ if (-not $keySet) {
     Write-Host ""
     Write-Host "   Press any key to open the settings file..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-
     Start-Process notepad $envFile -Wait
     OK "Settings saved"
-} else {
+} elseif ($keySet) {
     OK "API key already configured"
 }
 
@@ -289,19 +323,19 @@ try {
             if (-not $cfg.PSObject.Properties["mcpServers"]) {
                 $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
             }
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-local"    -NotePropertyValue $localEntry  -Force
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-dizaster"  -NotePropertyValue $remoteEntry -Force
+            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-local"   -NotePropertyValue $localEntry  -Force
+            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-dizaster" -NotePropertyValue $remoteEntry -Force
             $cfg | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
         } catch {
             [PSCustomObject]@{ mcpServers = [PSCustomObject]@{
                 "lavira-local"    = $localEntry
-                "lavira-dizaster"  = $remoteEntry
+                "lavira-dizaster" = $remoteEntry
             }} | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
         }
     } else {
         [PSCustomObject]@{ mcpServers = [PSCustomObject]@{
             "lavira-local"    = $localEntry
-            "lavira-dizaster"  = $remoteEntry
+            "lavira-dizaster" = $remoteEntry
         }} | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
     }
     OK "Claude Desktop connected"
@@ -348,7 +382,6 @@ Write-Host "  ============================================================" -For
 Write-Host ""
 
 if ($rebootNeeded) {
-    # Schedule start.bat to run once after reboot via Run registry key
     try {
         $startBat = Join-Path $LAVIRA_DIR "start.bat"
         if (Test-Path $startBat) {
@@ -370,6 +403,5 @@ if ($rebootNeeded) {
     Write-Host ""
     Write-Host "   The engine will start in a moment..." -ForegroundColor Gray
     Write-Host ""
-    # Signal to Install-Lavira.bat that setup succeeded
     exit 0
 }
