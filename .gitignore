@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# ── Windows deployment keys (never commit — injected at build time via CI secrets)
+windows/keys.env
+
 # ── Runtime data (never commit) ─────────────────────────────────────────────
 uploads/
 outputs/
@@ -26,7 +29,7 @@ electron/node_modules/
 
 # ── Stale internal docs ───────────────────────────────────────────────────────
 AGENT_HANDOFF.md
-HANDOFFFFFF.md
+HANDOFFFFF.md
 MASTER_ANALYSIS_APRIL14.md
 LAVIRA_MCP_HANDOFF.md
 
