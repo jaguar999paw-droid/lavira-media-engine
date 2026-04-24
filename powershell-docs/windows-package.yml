@@ -1,0 +1,86 @@
+name: Package Windows ZIP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package-windows:
+    name: Build lavira-media-engine-windows-setup.zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Windows setup ZIP
+        run: |
+          mkdir -p staging/windows
+
+          # ── Core engine files ────────────────────────────────────────
+          cp docker-compose.yml       staging/
+          cp .env.example             staging/
+          cp Dockerfile               staging/
+
+          # ── Windows helper files (root of ZIP) ───────────────────────
+          cp windows/start.bat              staging/
+          cp windows/SETUP.md               staging/
+          cp windows/INSTALL.bat            staging/
+          cp windows/setup-remote-access.ps1 staging/
+
+          echo "ZIP contents:"
+          ls -lah staging/
+
+          cd staging
+          zip -r ../lavira-media-engine-windows-setup.zip .
+          cd ..
+
+          echo "Final ZIP:"
+          unzip -l lavira-media-engine-windows-setup.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-setup-zip
+          path: lavira-media-engine-windows-setup.zip
+          retention-days: 14
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: "Lavira Media Engine ${{ github.ref_name }}"
+          body: |
+            ## 🦁 Lavira Media Engine ${{ github.ref_name }}
+
+            ### ⬇️ Download
+
+            | File | Platform |
+            |------|----------|
+            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** |
+
+            ---
+
+            ### Windows Setup — One Double-Click
+
+            **1.** Download and extract `lavira-media-engine-windows-setup.zip` anywhere.
+
+            **2.** Double-click **`INSTALL.bat`**
+
+            **3.** Click **Yes** on the Windows prompt.
+
+            **4.** Wait ~10 minutes. Your browser opens automatically when done.
+
+            > Everything is pre-configured. API keys, AI tools, and remote access are all set up automatically.
+
+            ---
+
+            ### Need help?
+            Email: info@lavirasafaris.com
+
+          files: lavira-media-engine-windows-setup.zip
+          draft: false
+          prerelease: false

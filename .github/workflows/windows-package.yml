@@ -37,13 +37,10 @@ jobs:
           cp windows/keys.env.example            staging/
 
           # ── Inject live API keys → keys.env (never stored in git) ─────────
-          cat > staging/keys.env << EOF
-          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-          PEXELS_API_KEY=${PEXELS_API_KEY}
-          GIPHY_API_KEY=${GIPHY_API_KEY}
-          EOF
-          # Strip leading whitespace from heredoc
-          sed -i 's/^[[:space:]]*//' staging/keys.env
+          # Use printf to avoid heredoc indentation injecting leading spaces
+          printf 'ANTHROPIC_API_KEY=%s\nPEXELS_API_KEY=%s\nGIPHY_API_KEY=%s\n' \\
+            "${ANTHROPIC_API_KEY}" "${PEXELS_API_KEY}" "${GIPHY_API_KEY}" \\
+            > staging/keys.env
 
           echo "ZIP contents:"
           ls -lah staging/

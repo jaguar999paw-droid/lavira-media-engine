@@ -4,6 +4,35 @@ All notable changes to Lavira Media Engine are documented here.
 
 ---
 
+## [1.2.1] — 2026-04-24
+
+### Fixed
+- **`windows/setup-remote-access.ps1`**: Added `-ScriptDir` parameter to `param()` block.
+  `Install-Lavira.bat` was passing `-ScriptDir "%~dp0"` but the PS1 had no matching
+  parameter, so PowerShell silently ignored it. `$SCRIPT_DIR` was set from
+  `$PSCommandPath` (the PS1's own location — often a temp folder when launched from
+  a ZIP), causing `keys.env` lookup to fail and the API-key step to fall through to
+  the Notepad prompt or error out entirely. `$SCRIPT_DIR` now resolves as:
+  `$ScriptDir` (if passed and valid) → `Split-Path -Parent $PSCommandPath` → `$PWD`.
+- **`.github/workflows/windows-package.yml`**: Replaced `cat << EOF` heredoc with
+  `printf` for writing `keys.env`. The indented heredoc was injecting 10 leading
+  spaces before each `KEY=value` line; the downstream `sed` strip only fired after
+  `zip` had already captured the malformed file. `printf '%s\n' ...` is whitespace-safe
+  and removes the strip step entirely.
+
+---
+
+
+## [1.2.0] — 2026-04-24
+
+### Added
+- **`powershell-docs/setup-remote-access.ps1`** — one-shot Windows remote-access bootstrap: installs Tailscale (with tag:lavira), Docker Desktop, Claude Desktop, and the Lavira engine stack on a fresh Windows machine. Supports `-TailscaleAuthKey` and `-LaviraVersion` parameters; auto-elevates to Administrator.
+- **`powershell-docs/windows-package.yml`** — GitHub Actions workflow that builds `lavira-media-engine-windows-setup.zip` on every `v*.*.*` tag, bundling `docker-compose.yml`, `.env.example`, `start.bat`, `SETUP.md`, `INSTALL.bat`, and `setup-remote-access.ps1` into a single downloadable ZIP attached to the GitHub Release.
+- **`HANDOFFFFFF.md`** — strategic architecture analysis and MCP roadmap document.
+
+---
+
+
 ## [1.1.1] — 2026-04-19
 
 ### Fixed
