@@ -1,59 +1,46 @@
 # NEXT_AGENT_HANDOFF.md
-> Written: 2026-04-17 | For: Next Claude session continuing this project
+> Updated: 2026-04-24 | For: Next Claude session continuing this project
 
 ---
 
 ## What Was Done This Session
 
-| Action | Status |
-|--------|--------|
-| Diagnosed "connecting..." UI bug (Docker stack was down) | ✅ Done |
-| Wrote `.gitignore` | ✅ Pushed |
-| Wrote `.env.example` | ✅ Pushed |
-| Fixed 5 hardcoded phone/URL strings in engine files | ✅ Done locally — NOT yet pushed |
-| Fixed `mcp-stdio.sh` hardcoded absolute path | ✅ Pushed to GitHub |
-| Deleted stray `url?sa=t` file from repo | ✅ Pushed to GitHub |
-| Wrote full README (multi-OS, MCP docs, architecture) | ✅ Pushed to GitHub |
+| Action | Status | Commit |
+|--------|--------|--------|
+| Fix critical bug: missing `BRAND` import in `image.js` (caused runtime crash in `brandWatermark`) | ✅ Pushed | e46cb369 |
+| `setup-remote-access.ps1` STEP 7 rewritten to read from `keys.env` silently; Notepad only as fallback | ✅ Pushed | d03afd3d |
+| `windows/keys.env.example` created — template for zero-touch deployment | ✅ Pushed | c62dc5a6 |
+| `windows-package.yml` updated — adds `Install-Lavira.bat` + `keys.env.example` to release ZIP | ✅ Pushed | fc5c3c5e |
 
 ---
 
-## What Was NOT Done / Needs Next Agent
+## Outstanding from Previous Session (Still Needed)
 
-### 1. LOCAL FIXES NOT PUSHED TO GITHUB
-The following files were modified on the local machine (`/home/kamau/lavira-media-engine`) but changes were NOT committed or pushed:
+### 1. LOCAL ENGINE FIXES — NOT YET PUSHED
+The following files were modified on `/home/kamau/lavira-media-engine` but changes may not be committed:
 
-- `src/engines/promo.js` — hardcoded phone replaced with `${BRAND.phone}`
-- `src/engines/dynamic-templates.js` — hardcoded phone/URL replaced
-- `src/engines/image.js` — hardcoded phone/URL replaced
+- `src/engines/promo.js`
+- `src/engines/dynamic-templates.js`
+- `src/engines/image.js`
 
-**Action needed:**
+**Verify and push:**
 ```bash
 cd /home/kamau/lavira-media-engine
+git status
+git diff src/engines/promo.js src/engines/dynamic-templates.js
+# If there are local changes not in GitHub:
 git add src/engines/promo.js src/engines/dynamic-templates.js src/engines/image.js
 git commit -m "fix: replace hardcoded contact info with BRAND object references"
 git push origin main
 ```
 
-### 2. start.sh AND start-clean.sh NOT PUSHED
-These files exist locally and are critical. Check if they were pushed:
-```bash
-# On machine:
-git status
-git log --oneline -10
-```
-If not pushed: `git add start.sh start-clean.sh && git commit -m "feat: add startup scripts" && git push`
+> Note: `image.js` was already fixed remotely (missing BRAND import), but if local has
+> additional hardcoded string fixes, those still need pushing.
 
-### 3. MCP ↔ WEB UI SPLIT (not started)
-Currently both live in the same repo. Future split plan:
-- `lavira-mcp/` — new repo with just `src/mcp/`, `src/engines/`, `src/orchestrator/`, `src/content/`, `src/publishing/`, `package.json` (MCP deps only)
-- `lavira-dashboard/` — new repo with `public/index.html` + thin Express proxy
+### 2. UI HEALTH CHECK TIMEOUT FIX (not implemented)
+`public/index.html` line ~1162 — `fetch('/api/health')` has no timeout, hangs forever if engine is slow.
 
-Rationale: independent versioning, separate Docker images, cleaner MCP distribution.
-
-### 4. UI "CONNECTING" PERMANENT FIX (documented, not implemented)
-The `fetch('/api/health')` call in `public/index.html` line ~1162 has no timeout — if the engine is slow to start, the spinner hangs forever.
-
-**Fix to apply:**
+**Fix:**
 ```js
 async function init() {
   try {
@@ -70,79 +57,46 @@ async function init() {
 }
 ```
 
-### 5. MISSING: `src/` subdirectory files not verified on GitHub
-The GitHub repo shows `src/engines/`, `src/mcp/` etc. as directories but we didn't verify all JS files inside are present. Run:
+### 3. DOCKER VOLUME external:true
+`docker-compose.yml` — add `external: true` to `lavira-db` volume to suppress the warning on machines where it was created manually.
+
+---
+
+## Current Windows Delivery State
+
+```
+lavira-media-engine-windows-setup.zip
+  ├── Install-Lavira.bat          ← double-click entry point (calls PS1)
+  ├── setup-remote-access.ps1    ← full bootstrap (Tailscale+SSH+Docker+Claude)
+  ├── keys.env.example           ← copy to keys.env, fill in keys for zero-touch deploy
+  ├── start.bat                  ← start/restart engine only
+  ├── SETUP.md                   ← human guide
+  ├── docker-compose.yml
+  ├── .env.example
+  └── Dockerfile
+```
+
+**Deployment modes:**
+- **Interactive**: `Install-Lavira.bat` → opens Notepad for API key
+- **Zero-touch**: add `keys.env` with pre-filled keys → `Install-Lavira.bat` → fully silent
+- **Remote (SSH from dizaster)**: `setup-remote-access.ps1` → Tailscale tag:lavira + SSH
+
+**Trigger a release:**
 ```bash
-github_list_directory owner=jaguar999paw-droid repo=lavira-media-engine path=src/engines
-github_list_directory owner=jaguar999paw-droid repo=lavira-media-engine path=src/mcp
+git tag v1.2.0 && git push origin v1.2.0
 ```
-And compare against local `find src -name "*.js" | sort`.
-
-### 6. MISSING: LICENSE file
-No LICENSE on the repo. Add MIT:
-```
-github_create_or_update_file owner=jaguar999paw-droid repo=lavira-media-engine path=LICENSE
-content: standard MIT license text with year 2026 and "Paul Wambugu"
-```
-
-### 7. MISSING: Docker volume `lavira-db` marked external
-`docker-compose.yml` has `lavira-db` as a named volume but it wasn't created by Compose (exists from previous manual run). This causes a warning. Fix:
-```yaml
-volumes:
-  lavira-db:
-    external: true   # add this line
-```
+GitHub Actions will build and attach the ZIP automatically.
 
 ---
 
-## Repo State as of This Session
+## Local Machine State (as of last check)
 
-**GitHub:** `https://github.com/jaguar999paw-droid/lavira-media-engine`
-
-**What's on GitHub (confirmed):**
-- `.gitignore` ✅
-- `.env.example` ✅  
-- `README.md` ✅ (full, multi-OS)
-- `mcp-stdio.sh` ✅ (path fixed)
-- `docker-compose.yml` ✅
-- `Dockerfile` ✅
-- `start.sh`, `start-clean.sh` ✅
-- `src/` tree ✅ (not fully verified at file level)
-- `public/index.html` ✅
-
-**What's NOT on GitHub:**
-- Fixed engine files (promo.js, dynamic-templates.js, image.js)
-- `SHIP_PLAN.md` (generated by Claude Desktop, lives in outputs)
-- `outputs/`, `uploads/`, `lavira.db` (gitignored correctly)
-
----
-
-## Local Machine State
-
-- SSH host: `localhost` (kamau@127.0.0.1:22)
+- SSH: `localhost` (kamau@127.0.0.1:22)
 - Project root: `/home/kamau/lavira-media-engine/`
-- Engine running: `http://localhost:4005/api/health` → `{"status":"ok"}`
-- MCP running: `http://localhost:4006/sse`
-- Docker stack: `lavira-media-engine` + `lavira-mcp` containers (healthy)
-- WARNING: bare-metal `node src/mcp/server.js` (PID ~17612) runs alongside Docker on boot — `bash start.sh` kills it, but it may respawn. Check with `ps aux | grep "node.*mcp" | grep -v docker | grep -v grep`
-
----
-
-## Quick Verification Commands for Next Agent
-
-```bash
-# SSH in
-ssh-create-session localhost
-
-# Check engine
-curl http://localhost:4005/api/health
-
-# Check git status of local fixes
-cd /home/kamau/lavira-media-engine && git status && git log --oneline -5
-
-# Check for duplicate node processes
-ps aux | grep "node.*src" | grep -v grep | grep -v docker
-
-# Verify no hardcodes remain
-grep -rn "+254 721 757 387\|lavirasafaris\.com" src/engines/ | grep -v "BRAND\."
-```
+- Engine: `http://localhost:4005/api/health`
+- MCP: `http://localhost:4006/sse`
+- Tailscale IP (dizaster): `100.118.209.46`
+- WARNING: bare-metal `node src/mcp/server.js` may be running alongside Docker — check with:
+  ```bash
+  ps aux | grep "node.*src" | grep -v grep | grep -v docker
+  ```
