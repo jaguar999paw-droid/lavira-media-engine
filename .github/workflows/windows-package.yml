@@ -37,9 +37,8 @@ jobs:
           cp windows/keys.env.example            staging/
 
           # ── Inject live API keys → keys.env (never stored in git) ─────────
-          # Use printf to avoid heredoc indentation injecting leading spaces
-          printf 'ANTHROPIC_API_KEY=%s\nPEXELS_API_KEY=%s\nGIPHY_API_KEY=%s\n' \\
-            "${ANTHROPIC_API_KEY}" "${PEXELS_API_KEY}" "${GIPHY_API_KEY}" \\
+          printf 'ANTHROPIC_API_KEY=%s\nPEXELS_API_KEY=%s\nGIPHY_API_KEY=%s\n' \
+            "${ANTHROPIC_API_KEY}" "${PEXELS_API_KEY}" "${GIPHY_API_KEY}" \
             > staging/keys.env
 
           echo "ZIP contents:"
@@ -58,58 +57,94 @@ jobs:
           path: lavira-media-engine-windows-setup.zip
           retention-days: 14
 
-      - name: Publish to GitHub Release
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           name: "Lavira Media ${{ github.ref_name }}"
           body: |
-            ## 🦁 Lavira Media Engine ${{ github.ref_name }}
+            ## Lavira Media Engine ${{ github.ref_name }}
 
-            ### ⬇️ Download
-
-            | File | Platform |
-            |------|----------|
-            | **`lavira-media-engine-windows-setup.zip`** | **Windows 10/11** |
-            | `Source code (zip)` | Developers |
+            > AI-powered safari content platform — web studio + Claude MCP tools.
 
             ---
 
-            ### Install — no configuration needed
+            ## ⬇️ Which file do I download?
 
-            1. Extract `lavira-media-engine-windows-setup.zip` anywhere
-            2. Double-click **`Install-Lavira.bat`**
-            3. Click **Yes** when Windows asks for permission
-            4. Wait ~10 minutes — everything installs automatically
-            5. Your browser opens to the Lavira studio at **http://localhost:4005**
-
-            > API keys are pre-configured. No Notepad, no prompts.
-
-            **If your computer needs to restart** during install — let it. Lavira starts automatically after the reboot.
+            | You want… | Download this |
+            |---|---|
+            | **Full setup — MCP + web + remote access** ✅ Recommended | `lavira-media-engine-windows-setup.zip` |
+            | Web studio only (no MCP, no Docker) | `Lavira-Media-Setup-*.exe` |
+            | macOS | `Lavira-Media-Setup-*.dmg` |
+            | Linux | `Lavira-Media-Setup-*.AppImage` or `*.deb` |
 
             ---
 
-            ### To start Lavira after the first install
+            ## 🪟 Windows — Full Setup (MCP + Web)
 
-            Double-click **`start.bat`** in the extracted folder.
+            **Requirements:** Windows 10 or 11 (64-bit). Internet connection. ~15 min on first run.
+
+            **Steps:**
+
+            1. Download **`lavira-media-engine-windows-setup.zip`** from the assets below
+            2. Right-click the ZIP → **Extract All** → choose any folder (e.g. Desktop)
+            3. Open the extracted folder
+            4. Double-click **`Install-Lavira.bat`**
+            5. Click **Yes** when Windows asks for permission
+            6. Leave the window open — it installs everything automatically (~10 min)
+            7. If asked to restart, click OK — setup resumes automatically after reboot
+            8. When done, your browser opens to **http://localhost:4005** ✅
+
+            > **API keys are pre-loaded.** No Notepad, no prompts, no configuration needed.
+
+            **What gets installed automatically:**
+            - Docker Desktop (runs the engine)
+            - Claude Desktop (pre-wired to Lavira MCP tools)
+            - Lavira engine files
+            - Auto-start on login
 
             ---
 
-            ### Remote access (for admin via Tailscale SSH)
+            ## 🔌 Using Lavira with Claude Desktop (MCP)
 
-            The setup script automatically joins the machine to the Lavira tailnet as `tag:lavira` with SSH enabled. From `dizaster`:
-            ```bash
-            ssh YOUR_USERNAME@lavira-win-HOSTNAME
-            # Update keys any time:
-            nano ~/lavira-media-engine/.env
-            docker compose -f ~/lavira-media-engine/docker-compose.yml restart
+            After install, open **Claude Desktop**. You will see Lavira tools available in every conversation — no extra setup needed.
+
+            To verify: open Claude Desktop → start a new chat → type `list my recent jobs`. Claude should respond with Lavira data.
+
+            **MCP server address** (if you need to add it manually):
             ```
+            http://localhost:4006/sse
+            ```
+            Add this under `Settings → Developer → MCP Servers` in Claude Desktop.
 
             ---
 
-            See **`SETUP.md`** inside the ZIP for full details.
+            ## 🌐 Daily use
 
-            **Docs:** [github.com/jaguar999paw-droid/lavira-media-engine](https://github.com/jaguar999paw-droid/lavira-media-engine)
+            | Task | How |
+            |---|---|
+            | Open web studio | http://localhost:4005 |
+            | Start engine (after reboot) | Double-click `start.bat` in the install folder |
+            | Stop engine | Open PowerShell → `docker compose down` |
+            | Check engine is running | Open PowerShell → `docker compose ps` |
+
+            ---
+
+            ## ❓ Troubleshooting
+
+            | Problem | Fix |
+            |---|---|
+            | "Windows protected your PC" dialog | Click **More info** → **Run anyway** |
+            | UAC prompt doesn't appear | Right-click `Install-Lavira.bat` → **Run as administrator** |
+            | Browser says "can't connect" after install | Wait 30 seconds and refresh |
+            | Engine stopped after reboot | Double-click `start.bat` |
+            | Port 4005 already in use | Open PowerShell: `docker compose down` then `docker compose up -d` |
+            | Claude Desktop doesn't show Lavira tools | Restart Claude Desktop |
+
+            ---
+
+            **Support:** info@lavirasafaris.com
+            **Docs:** https://github.com/jaguar999paw-droid/lavira-media-engine
           files: lavira-media-engine-windows-setup.zip
           fail_on_unmatched_files: true
           draft: false
