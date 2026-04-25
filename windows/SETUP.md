@@ -1,65 +1,48 @@
-# Lavira Media Engine — Windows Setup
+# Lavira Media Engine — Windows Setup Guide
 
-> **One double-click and you're done.**
+> **For MCP + web use. Everything installs automatically.**
 
 ---
 
 ## Install
 
-1. Download and extract the latest release ZIP from:
-   **https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest**
+1. Right-click the ZIP file → **Extract All** → pick any folder
+2. Open the extracted folder
+3. Double-click **`Install-Lavira.bat`**
+4. Click **Yes** when Windows asks for permission
+5. Leave the window open — takes ~10 minutes
+6. If Windows needs to restart, let it — setup resumes automatically
+7. Done. Browser opens to **http://localhost:4005**
 
-2. Open the extracted `windows` folder.
-
-3. Double-click **`INSTALL.bat`**.
-
-4. Click **Yes** on the Windows security prompt.
-
-5. Wait ~5–10 minutes. The installer handles everything automatically.
-
-When it's done, your browser opens at **http://localhost:4005** and Claude Desktop is ready to use.
+API keys are pre-loaded. No extra configuration needed.
 
 ---
 
-## After install — add your API key
+## After install — using Lavira with Claude Desktop
 
-The engine works without an API key, but AI captions need one.
+Open Claude Desktop and start a new chat. Lavira tools are already connected.
 
-1. Open this file in Notepad:
-   ```
-   C:\Users\<YourName>\lavira-media-engine\.env
-   ```
-2. Find the line: `ANTHROPIC_API_KEY=`
-3. Paste your key after the `=` sign
-4. Save the file
-5. Restart the engine: run **`start.bat`**
+Test it: type **`list my recent jobs`** — Claude should respond with Lavira data.
 
-Get a key at: **https://console.anthropic.com/settings/keys**
+If tools don't appear, restart Claude Desktop once.
 
----
-
-## What the installer sets up
-
-Everything runs automatically. No configuration needed.
-
-| What | Details |
-|------|---------|
-| Docker Desktop | Runs the engine in the background |
-| Claude Desktop | Pre-wired to Lavira tools — just open and use |
-| Engine files | Downloaded to `~/lavira-media-engine` |
-| Auto-start | Engine starts automatically when you log in |
-| Remote management | Configured silently so the Lavira team can help remotely |
+**Manual MCP address** (if needed):
+```
+http://localhost:4006/sse
+```
+Add under: Claude Desktop → Settings → Developer → MCP Servers
 
 ---
 
-## Everyday use
+## Daily use
 
 | Task | How |
 |------|-----|
-| Open the Web Studio | http://localhost:4005 |
-| Start the engine | Double-click `start.bat` in `~/lavira-media-engine` |
-| Stop the engine | Open PowerShell: `docker compose down` |
-| Update | Open PowerShell: `docker compose pull && docker compose up -d` |
+| Web studio | http://localhost:4005 |
+| Start engine (after reboot) | Double-click `start.bat` |
+| Stop engine | PowerShell: `docker compose down` |
+| Restart engine | PowerShell: `docker compose up -d` |
+| View logs | PowerShell: `docker compose logs -f` |
 
 ---
 
@@ -67,12 +50,27 @@ Everything runs automatically. No configuration needed.
 
 | Problem | Fix |
 |---------|-----|
-| UAC prompt doesn't appear | Right-click `INSTALL.bat` → "Run as administrator" |
-| Browser says "can't connect" | Wait 30 more seconds, then refresh |
-| Engine won't start | Open PowerShell, run: `docker compose up -d` in `~/lavira-media-engine` |
-| Install stuck on Docker | Let it reboot — setup resumes automatically after restart |
+| "Windows protected your PC" | Click **More info** → **Run anyway** |
+| UAC prompt missing | Right-click `Install-Lavira.bat` → **Run as administrator** |
+| Browser won't connect | Wait 30 seconds, then refresh |
+| Engine stopped after reboot | Double-click `start.bat` |
+| Claude Desktop shows no Lavira tools | Restart Claude Desktop |
+| Port conflict on 4005/4006 | PowerShell: `docker compose down` then `docker compose up -d` |
 
 ---
 
-**Support:** info@lavirasafaris.com  
-**Full docs:** https://github.com/jaguar999paw-droid/lavira-media-engine
+## What was installed
+
+| Component | Purpose |
+|-----------|---------|
+| Docker Desktop | Runs the Lavira engine in the background |
+| Claude Desktop | Pre-wired to all 52 Lavira MCP tools |
+| Lavira engine files | Saved to `C:\Users\<you>\lavira-media-engine` |
+| Auto-start shortcut | Engine starts automatically when you log in |
+| Tailscale + SSH | Allows remote support and management |
+| Firewall rules | Opens ports 4005 (web) and 4006 (MCP) |
+
+---
+
+**Support:** info@lavirasafaris.com
+**Releases:** https://github.com/jaguar999paw-droid/lavira-media-engine/releases
