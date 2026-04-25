@@ -133,9 +133,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ── Publish GitHub Release ────────────────────────────────────────────────────
-  release:
-    name: Publish Release
+  # ── Upload installers to Release (no body — windows-package.yml owns it) ─────
+  upload-installers:
+    name: Upload Installers to Release
     needs: [build-windows, build-mac, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -150,48 +150,11 @@ jobs:
       - name: List release assets
         run: find release-assets -type f | sort
 
+      # append_body: true — never overwrites the release description
+      # windows-package.yml is the single source of truth for the release body
       - uses: softprops/action-gh-release@v2
         with:
-          name: "Lavira Media ${{ github.ref_name }}"
-          body: |
-            ## 🦁 Lavira Media Engine ${{ github.ref_name }}
-
-            **AI-powered safari content engine — now as a desktop app.**
-            No terminal, no Docker, no Node.js required. Just install and open.
-
-            ---
-
-            ### ⬇️ Download for your platform
-
-            | Platform | Installer | Instructions |
-            |---|---|---|
-            | **Windows 10/11** | `Lavira-Media-Setup-*.exe` | Double-click → Next → Finish → open from Desktop shortcut |
-            | **macOS 12+** | `Lavira-Media-Setup-*.dmg` | Open DMG → drag **Lavira Media** to Applications → launch |
-            | **Linux** | `Lavira-Media-Setup-*.AppImage` | `chmod +x *.AppImage` → double-click to run |
-            | **Linux (deb)** | `Lavira-Media-Setup-*.deb` | `sudo dpkg -i *.deb` → find in app menu |
-
-            ---
-
-            ### 🔑 First launch — Setup Wizard
-
-            A one-time setup window asks for your API keys:
-
-            | Key | Required? | Get it at |
-            |---|---|---|
-            | **Anthropic API key** | ✅ Required | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
-            | **Pexels API key** | Optional (free) | [pexels.com/api](https://www.pexels.com/api/) |
-            | **GIPHY API key** | Optional (free) | [developers.giphy.com](https://developers.giphy.com/) |
-
-            ---
-
-            ### 💡 What's inside
-
-            - **52 AI-powered MCP tools** — branded posts, stock media, Instagram/TikTok/Facebook publishing
-            - **Bundled FFmpeg** — no system install needed
-            - **System tray** — runs in background, reopens with one click
-            - **MCP Server on :4006** — connect Claude Desktop for conversational control
-
-            **Full docs:** [github.com/jaguar999paw-droid/lavira-media-engine](https://github.com/jaguar999paw-droid/lavira-media-engine)
+          append_body: true
           files: release-assets/*
           draft: false
           prerelease: false
