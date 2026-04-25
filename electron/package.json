@@ -1,6 +1,6 @@
 {
   "name": "lavira-media",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Lavira Safaris — Automated Social Media Content Engine",
   "main": "main.js",
   "private": true,
