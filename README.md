@@ -1,4 +1,4 @@
-# 🦁 Lavira Media Engine
+# 🦁 Lavira Media Engine — v1.4.0
 
 > **AI-powered safari marketing content engine** — generates branded Instagram posts, videos, and audio for safari companies, fully controllable via an MCP server that plugs directly into Claude Desktop or any MCP-compatible AI agent.
 
@@ -15,11 +15,28 @@ Lavira Media Engine automates the full content pipeline for safari marketing:
 
 - **Fetches real stock media** from Pexels (photos + videos) and GIPHY
 - **Composites branded images** — overlays logo, destination, hook text, contact info — at Instagram/Facebook/TikTok resolution
+- **Analyses media with Claude Vision** — detects safe text zones, scene mood, and dominant palette before compositing (`image-vision.js`)
+- **Routes creative decisions intelligently** — `intelligence-router.js` maps vision signals to layout family, hook tone, and CTA style so every post fits its source media
 - **Generates AI captions** with hooks, hashtags, and CTAs via Claude (Anthropic)
 - **Processes audio** — normalises to broadcast standard (-16 LUFS), exports OGG/MP3
 - **Publishes directly** to Instagram, Facebook, and TikTok (with tokens)
 - **Runs a scheduler** — auto-generates daily promos at 06:00 EAT
 - **Exposes 52 MCP tools** so Claude Desktop (or any AI agent) can control the entire pipeline conversationally
+- **`sync.sh`** — one-command local ↔ GitHub sync with `--release` flag to tag and trigger CI automatically
+
+---
+
+## What's new in v1.4.0
+
+| Area | Change |
+|------|--------|
+| 🧠 **Intelligence Router** | Vision signals now drive palette, layout, hook tone, and CTA style per post |
+| 👁 **Claude Vision pipeline** | Safe-text-zone detection + scene mood analysis before every composite |
+| 🪟 **Windows installer** | TLS 1.2 enforcement, binary signature checks, `-ScriptDir` param fix, `keys.env` whitespace fix |
+| 🔧 **MCP server** | Duplicate tool registration guard — no more silent failures on reconnect |
+| 📦 **sync.sh** | One-command push + release tagging + tailnet snapshot |
+
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -505,6 +522,7 @@ lavira-media-engine/
 ├── start.sh                        # ← Always use this to start
 ├── start-clean.sh                  # Full rebuild + restart
 ├── mcp-stdio.sh                    # Claude Desktop stdio wrapper
+├── sync.sh                         # ← Local ↔ GitHub sync + release tagging
 ├── package.json
 ├── .env.example                    # Copy to .env
 └── .gitignore

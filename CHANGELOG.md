@@ -2,6 +2,26 @@
 
 All notable changes to Lavira Media Engine are documented here.
 
+## [1.4.0] — 2026-04-29
+
+### Added
+- **`src/engines/intelligence-router.js`** — Vision-aware routing layer that reads Claude Vision scene analysis signals (mood, brightness, subject, composition) and maps them to palette selection, hook tone, and CTA style. Posts now adapt their visual language to the source media rather than using static brand defaults.
+- **`src/engines/image-vision.js`** — Claude Vision pipeline for analysing incoming images: returns `safeTextZone` (where to place overlay text without obscuring the subject), dominant colour palette, scene mood, and a short content descriptor fed into caption generation.
+- **`sync.sh`** — Local ↔ GitHub sync script with `--release` (auto-bump or explicit tag), `--pull-only`, and `--status` modes. Handles stash/rebase/push in one command and triggers the CI release workflow automatically.
+
+### Fixed
+- **`windows/setup-remote-access.ps1`** — Installer security hardening: TLS 1.2 enforcement, signature verification for all downloaded binaries, non-interactive flag propagation so silent installs don't hang on UAC prompts.
+- **`.github/workflows/windows-package.yml`** — `keys.env` whitespace corruption fixed (heredoc → `printf`); `-ScriptDir` parameter wired correctly end-to-end so the API-key step resolves the right path from inside the ZIP.
+- **`src/mcp/server.js`** — Duplicate tool registration guard: a second MCP server instance no longer shadows the first, eliminating the tool-call collision bug that caused silent failures when Claude Desktop reconnected.
+
+### Changed
+- **Caption pipeline** — AI caption generation now receives intelligence-router signals as context, producing hooks and CTAs that match the visual mood of each post.
+- **Card templates** — `intelligence-router` selects layout family (Minimal Float / Split Panel / Immersive Overlay) based on `safeTextZone` output, so text is never placed over the subject's face or key focal point.
+- **`package.json`** — Version bumped to `1.4.0`.
+
+---
+
+
 ---
 
 ## [1.2.1] — 2026-04-24
