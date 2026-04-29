@@ -58,6 +58,8 @@ lavira-media-engine/
 │   ├── server.js               # Express — Web UI + REST API (:4005)
 │   ├── config.js               # All config from env (zero hardcodes)
 │   ├── mcp/server.js           # MCP server — stdio or HTTP+SSE (:4006)
+│   ├── engines/intelligence-router.js  # Vision signal → palette/hook/tone decisions
+│   ├── engines/image-vision.js  # Claude Vision image analysis pipeline
 │   ├── engines/
 │   │   ├── promo.js            # Core branded image generation
 │   │   ├── compositor.js       # Multi-layer Sharp compositing
@@ -140,7 +142,15 @@ bash start.sh
 2. Extract the zip anywhere, e.g. `C:\LaviraMedia\`
 3. Double-click **`start.bat`**
 
-The script checks for Docker, auto-creates your `.env` (opens Notepad for API keys), pulls the images, starts the engine, and opens **http://localhost:4005** in your browser. See `SETUP.md` inside the zip for the full guide including Claude Desktop MCP setup.
+The script checks for Docker, creates your `.env`, starts the engine, and opens **http://localhost:4005** in your browser.
+
+> **API keys:** The public ZIP does **not** contain keys. You have two options:
+> 1. **Zero-touch** — place a `keys.env` file (same folder as `Install-Lavira.bat`) before running. The installer reads it silently.
+> 2. **Interactive** — run without `keys.env`; the installer opens Notepad once for you to paste your Anthropic key.
+>
+> Get a free key at https://console.anthropic.com/settings/keys
+>
+> See `SETUP.md` inside the zip for the full guide including Claude Desktop MCP setup.
 
 ---
 

@@ -53,7 +53,8 @@ echo  [OK] Docker Desktop is running.
 echo.
 
 :: ── Move to the project directory (parent of this script) ────────────────────
-cd /d "%~dp0.."
+:: Move to the folder where this script lives (== project root in Windows deployment)
+cd /d "%~dp0"
 
 :: ── Create persistent DB volume if it doesn't exist ──────────────────────────
 docker volume inspect lavira-db >nul 2>&1
@@ -91,18 +92,15 @@ if not exist ".env" (
 )
 
 :: ── Pull latest images ────────────────────────────────────────────────────────
-echo  [PULLING] Fetching latest Docker images (first run may take a few minutes)...
-docker compose pull --quiet
-echo  [OK] Images ready.
-echo.
-
 :: ── Stop any old containers cleanly ──────────────────────────────────────────
 echo  [RESTARTING] Stopping previous containers...
 docker compose down --remove-orphans >nul 2>&1
 
 :: ── Start the stack ──────────────────────────────────────────────────────────
 echo  [STARTING] Launching Lavira Media Engine...
-docker compose up -d
+echo  (First run builds the Docker image -- may take 5-10 minutes. Please wait.)
+echo.
+docker compose up -d --build
 
 if %errorlevel% neq 0 (
     color 0C

@@ -14,7 +14,8 @@ echo  Starting installer (you may see a UAC prompt — click Yes)...
 echo.
 
 :: Launch the PowerShell installer — it self-elevates
+:: -ScriptDir tells the PS1 where to find keys.env (same folder as this bat)
 powershell.exe -NoProfile -ExecutionPolicy Bypass ^
-  -File "%~dp0setup-remote-access.ps1"
+  -File "%~dp0setup-remote-access.ps1" -Silent -ScriptDir "%~dp0"
 
 exit /b 0

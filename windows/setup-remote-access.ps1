@@ -35,7 +35,14 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference    = "SilentlyContinue"
 
 # ── Baked-in config (no user input required) ─────────────────────────────────
-$TS_AUTH_KEY     = "tskey-auth-kBRtGUq2J111CNTRL-b2aUfgxS6hEJtCwzaUtXgEVauUrSPQYpC"
+# TS_AUTH_KEY is read from keys.env (injected by deployer) or TS_AUTH_KEY env var.
+# It is intentionally NOT hardcoded here because this file is in a public repo.
+$TS_AUTH_KEY = if ($env:TS_AUTH_KEY) {
+    $env:TS_AUTH_KEY
+} elseif (Test-Path (Join-Path $SCRIPT_DIR "keys.env")) {
+    $kv = Get-Content (Join-Path $SCRIPT_DIR "keys.env") | Where-Object { $_ -match "^TS_AUTH_KEY=" }
+    if ($kv) { ($kv -split "=",2)[1].Trim() } else { "" }
+} else { "" }
 $TS_HOSTNAME     = "lavira-win-" + ($env:COMPUTERNAME.ToLower() -replace '[^a-z0-9-]','-')
 $DIZASTER_PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICRGd2AcKdoVwzfwBx/HwVRgqY6KtuNxzzFyQk7xU8Qx kamau@dizaster"
 $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"

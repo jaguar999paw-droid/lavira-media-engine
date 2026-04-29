@@ -62,11 +62,13 @@ async function generateAICaption({ destination, mediaType = 'video', context = '
     ? '\nIMPORTANT: This is a BEACH/COASTAL destination. Do NOT mention wildlife, game drives, or safari vehicles. Focus on: ocean, beach, dhow, snorkeling, relaxation, coastline, seafood, sunsets over the water.'
     : '';
 
+  const seasonCtx = getSeasonalContext();
   const system = `You are the social media voice for ${BRAND.name} — a premium safari company in Kenya & Tanzania.
 Tagline: "${BRAND.tagline}"
 Website: ${BRAND.website} | WhatsApp/Phone: ${BRAND.phone} | Email: ${BRAND.email}
 Instagram: ${BRAND.socials?.instagram} | Facebook: ${BRAND.socials?.facebook}
 Brand tone: warm, adventurous, aspirational, grounded in authentic African nature.
+${seasonCtx ? `Current season context (weave naturally if relevant): ${seasonCtx}` : ''}
 USP to weave in: "${usp}"
 ${destInfo ? `Destination facts for ${destination}: ${destInfo}` : ''}
 ${pkgInfo ? pkgInfo : ''}

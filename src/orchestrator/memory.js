@@ -127,6 +127,9 @@ const log = {
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     if (!Object.keys(clean).length) return;
     if (clean.caption) { clean.caption_enc = encrypt(clean.caption); delete clean.caption; }
+    // Auto-serialize arrays/objects so callers never need to JSON.stringify manually
+    if (clean.outputs !== undefined && Array.isArray(clean.outputs)) clean.outputs = JSON.stringify(clean.outputs);
+    if (clean.meta !== undefined && typeof clean.meta === 'object') clean.meta = JSON.stringify(clean.meta);
     const sets = Object.keys(clean).map(k => `${k}=?`).join(',');
     db.prepare(`UPDATE content_log SET ${sets} WHERE job_id=?`).run(...Object.values(clean), jobId);
     audit('UPDATE', 'content_log', jobId, clean, actor);
@@ -154,7 +157,7 @@ const log = {
       // If outputs array is empty but job is done, try to populate from actual output files
       if (outputs.length === 0 && (r.status === 'done' || r.approved)) {
         const jobFile = require('path').join(require('../config').OUTPUTS_DIR, `${r.job_id}.json`);
-        const autoFile = require('path').join(require('../config').OUTPUTS_DIR, `auto_${r.job_id}.json`);
+        const autoFile = require('path').join(require('../config').OUTPUTS_DIR, `${r.job_id}.json`);
         try {
           let data;
           if (require('fs').existsSync(jobFile)) {
@@ -184,7 +187,7 @@ const log = {
     // If outputs array is empty but job is done, try to populate from actual output files
     if (outputs.length === 0 && (r.status === 'done' || r.approved)) {
       const jobFile = require('path').join(require('../config').OUTPUTS_DIR, `${jobId}.json`);
-      const autoFile = require('path').join(require('../config').OUTPUTS_DIR, `auto_${jobId}.json`);
+      const autoFile = require('path').join(require('../config').OUTPUTS_DIR, `${jobId}.json`);
       try {
         let data;
         if (require('fs').existsSync(jobFile)) {
