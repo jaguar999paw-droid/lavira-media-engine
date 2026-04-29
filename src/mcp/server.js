@@ -22,6 +22,9 @@ const comp      = require('../engines/compositor');
 const { generatePromoPackage } = require('../content/ai-captions');
 const { log, state } = require('../orchestrator/memory');
 const BRAND     = require('../orchestrator/brand');
+const intent    = require('../orchestrator/intent');
+const imageEnh  = require('../engines/image-enhanced');
+const videoEnh  = require('../engines/video-enhanced');
 
 const isHTTP = process.argv.includes('--http');
 const httpPort = parseInt(process.argv[process.argv.indexOf('--http') + 1] || '4005');
@@ -218,10 +221,10 @@ const TOOLS = [
   // POSTS MANAGEMENT
   { name:'save_to_posts',
     description:'Copy a finished output file into posts/ subdir. Platforms: instagram, facebook, tiktok, mcp-tasks, archive.',
-    inputSchema:{ type:'object', properties:{ filename:{type:'string',description:'Output filename (from outputs/ dir)'}, platform:{type:'string',enum:['instagram','facebook','tiktok','mcp-tasks','archive'],description:'Target subfolder'}, label:{type:'string',description:'Optional human label to prefix the file e.g. "zebra_grassland_post"'} }, required:['filename','platform'] } },
+    inputSchema:{ type:'object', properties:{ filename:{type:'string',description:'Output filename (from outputs/ dir)'}, platform:{type:'string',enum:['instagram','facebook','tiktok','whatsapp','mcp-tasks','archive'],description:'Target subfolder'}, label:{type:'string',description:'Optional human label to prefix the file e.g. "zebra_grassland_post"'} }, required:['filename','platform'] } },
   { name:'list_posts',
     description:'List all files in the posts/ directory, optionally filtered by platform subfolder.',
-    inputSchema:{ type:'object', properties:{ platform:{type:'string',enum:['instagram','facebook','tiktok','mcp-tasks','archive','all']} } } },
+    inputSchema:{ type:'object', properties:{ platform:{type:'string',enum:['instagram','facebook','tiktok','whatsapp','mcp-tasks','archive','all']} } } },
   // CACHE MANAGEMENT
   { name:'cache_stats',
     description:'Check external media cache stats: size, entries, age, freshness. Useful for monitoring storage.',
@@ -250,6 +253,67 @@ const TOOLS = [
     description:'List recent bookings with guest details, destination, travel date, and whether post-booking content was triggered.',
     inputSchema:{ type:'object', properties:{ limit:{type:'number'} } } },
 
+
+  // ── ORCHESTRATOR / DELEGATION TOOLS ─────────────────────────────────────────
+  { name:'smart_generate',
+    description:'MASTER TOOL: Parse any natural language prompt and execute the full post generation pipeline automatically. Detects platform (whatsapp/instagram/tiktok), destination, theme, media type. Routes to correct pipeline, generates real image/video files, delivers to /outputs/<platform>/. Use for casual prompts like: generate a whatsapp post for today.',
+    inputSchema:{ type:'object', properties:{ prompt:{type:'string'}, overridePlatform:{type:'string'}, overrideDestination:{type:'string'}, overrideTheme:{type:'string'} }, required:['prompt'] } },
+  { name:'image_metadata',
+    description:'Extract full metadata from an image: dimensions, format, file size MB, megapixels, aspect ratio, color space, EXIF/ICC presence.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'} }, required:['filePath'] } },
+  { name:'image_smart_crop',
+    description:'Entropy-based smart crop. Finds the most visually important region (animal, subject) and crops to exact target dimensions without guessing center.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'}, targetW:{type:'number'}, targetH:{type:'number'} }, required:['filePath','targetW','targetH'] } },
+  { name:'image_compare',
+    description:'Side-by-side A/B comparison of two images. Returns 1080x1080 composite for visual QA of two post variants.',
+    inputSchema:{ type:'object', properties:{ filePathA:{type:'string'}, filePathB:{type:'string'} }, required:['filePathA','filePathB'] } },
+  { name:'image_ocr_prepare',
+    description:'Pre-process image for OCR text extraction: greyscale + normalise + sharpen + threshold. Returns ready file + tesseract command.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'} }, required:['filePath'] } },
+  { name:'image_analyze_colors',
+    description:'Analyse dominant color, brightness, mood of an image. Returns recommended text color and overlay opacity for brand overlays.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'} }, required:['filePath'] } },
+  { name:'image_export_platform',
+    description:'Export an image resized and optimised for a specific social platform: whatsapp, instagram_post, instagram_story, instagram_portrait, facebook, twitter_card, tiktok_thumb, youtube_thumb, telegram.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'}, platform:{type:'string'} }, required:['filePath','platform'] } },
+  { name:'image_build_collage',
+    description:'Build a 2x2 grid collage from 2 to 4 images. Returns a single 1080x1080 branded JPEG composite.',
+    inputSchema:{ type:'object', properties:{ filePaths:{type:'array', items:{type:'string'}} }, required:['filePaths'] } },
+  { name:'video_probe',
+    description:'Probe a video file: duration, resolution, fps, codec, audio presence, file size, aspect ratio.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'} }, required:['filePath'] } },
+  { name:'video_clip',
+    description:'Trim a video: extract a segment starting at startSec for durationSec seconds. Returns new file.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'}, startSec:{type:'number'}, durationSec:{type:'number'} }, required:['filePath','startSec','durationSec'] } },
+  { name:'video_encode_platform',
+    description:'Encode a video for a specific platform with correct resolution, fps, bitrate, max duration: instagram_reel, tiktok, facebook, twitter, whatsapp, youtube_short.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'}, platform:{type:'string'}, startSec:{type:'number'}, maxSeconds:{type:'number'} }, required:['filePath','platform'] } },
+  { name:'video_add_watermark',
+    description:'Burn Lavira brand watermark (name, phone, website, destination) directly into video using ffmpeg drawtext. Returns new branded MP4.',
+    inputSchema:{ type:'object', properties:{ filePath:{type:'string'}, destination:{type:'string'} }, required:['filePath'] } },
+  { name:'video_to_reel',
+    description:'Convert a static image into an animated video reel with Ken Burns zoom effect (15s default). Perfect for WhatsApp/Instagram stories from a single photo.',
+    inputSchema:{ type:'object', properties:{ imagePath:{type:'string'}, durationSec:{type:'number'}, platform:{type:'string', enum:['instagram_reel','instagram_story','tiktok','youtube_short']} }, required:['imagePath'] } },
+  { name:'full_video_post_pipeline',
+    description:'MASTER VIDEO TOOL: search Pexels → download → probe → clip → encode for platform → burn Lavira logo watermark → auto-save to posts/<platform>/. Runs the COMPLETE 7-step pipeline. Always use this instead of calling individual video tools manually.',
+    inputSchema:{ type:'object', properties:{
+      query:       { type:'string', description:'Search query, e.g. "Masai Mara wildebeest migration"' },
+      destination: { type:'string', description:'Lavira destination name, used in filename and watermark' },
+      platform:    { type:'string', enum:['tiktok','instagram','facebook','whatsapp'], description:'Target platform' },
+      durationSec: { type:'number', description:'Target video length in seconds (default 30)' },
+    }, required:[] } },
+  { name:'video_search_stock',
+    description:'Search Pexels for portrait-oriented safari stock videos by keyword. Returns video download URLs, duration, resolution, photographer.',
+    inputSchema:{ type:'object', properties:{ query:{type:'string'}, limit:{type:'number'} }, required:['query'] } },
+  { name:'get_user_memory',
+    description:'Read the Lavira user memory and productivity profile. Shows standing preferences, platform status, smart prompts, content calendar, and known issues.',
+    inputSchema:{ type:'object', properties:{} } },
+  { name:'update_user_memory',
+    description:'Append or replace a section in the LAVIRA_USER_MEMORY.md file. Use to update known issues, content calendar, session notes, or standing preferences.',
+    inputSchema:{ type:'object', properties:{ section:{type:'string', description:'Section header to update (e.g. KNOWN ISSUES, CONTENT CALENDAR, STANDING PREFERENCES)'}, content:{type:'string', description:'New markdown content for the section'}, mode:{type:'string', enum:['append','replace'], description:'append adds below existing, replace overwrites section'} }, required:['content'] } },
+  { name:'cleanup_old_outputs',
+    description:'Delete output files older than N days to free disk space. Skips files referenced in approved jobs. Returns list of deleted files.',
+    inputSchema:{ type:'object', properties:{ olderThanDays:{type:'number', description:'Delete files older than this many days (default: 14)'}, dryRun:{type:'boolean', description:'If true, list files to delete without actually deleting'} } } },
 ];
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
@@ -262,6 +326,9 @@ async function handleTool(name, args) {
     if (!fp || path.isAbsolute(fp)) return fp;
     const fromUploads = path.join(cfg.UPLOADS_DIR, path.basename(fp));
     if (fs.existsSync(fromUploads)) return fromUploads;
+    // Bug2 fix: also check OUTPUTS_DIR (engine-generated files)
+    const fromOutputs = path.join(cfg.OUTPUTS_DIR, path.basename(fp));
+    if (fs.existsSync(fromOutputs)) return fromOutputs;
     const fromRoot = path.join(ENGINE_ROOT, fp);
     if (fs.existsSync(fromRoot)) return fromRoot;
     return fp; // fall-through – let caller throw the proper error
@@ -364,10 +431,7 @@ async function handleTool(name, args) {
         status: 'done',
         outputs: outputFiles
       });
-      // Immediately write outputs array into DB (bug fix: was never persisted)
-      if (outputFiles.length) {
-        log.update(jobId, { outputs: JSON.stringify(outputFiles), status: 'done' });
-      }
+      // outputs already persisted via log.insert above (JSON.stringify done inside insert)
       const s = { status:'done', jobId, mediaType:'auto', destination:dest, ...result };
       fs.writeFileSync(path.join(cfg.OUTPUTS_DIR, `${jobId}.json`), JSON.stringify(s));
       return { jobId, ...result, outputFiles, tip:`Call build_post_package with jobId="${jobId}" to add overlay` };
@@ -386,13 +450,22 @@ async function handleTool(name, args) {
       const { Anthropic } = require('@anthropic-ai/sdk');
       const client = new Anthropic({ apiKey: cfg.ANTHROPIC_KEY });
       const systemPrompt = `You are an expert assistant for Lavira Safaris media engine. ${args.context || 'Provide helpful, accurate responses.'}`;
-      const response = await client.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: args.prompt }]
-      });
-      return { response: response.content[0].text };
+      try {
+        const response = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: args.prompt }]
+        });
+        return { response: response.content[0].text };
+      } catch (e) {
+        // Bug3 fix: surface credit/auth errors clearly instead of silent crash
+        const isCredits = e.message && e.message.includes('credit balance');
+        const isAuth    = e.status === 401;
+        if (isCredits) return { error: 'Anthropic API credits depleted. Top up at console.anthropic.com/settings/billing', status: 'no_credits' };
+        if (isAuth)    return { error: 'ANTHROPIC_API_KEY invalid or expired. Update in .env', status: 'auth_error' };
+        throw e;
+      }
     }
 
     case 'generate_promo_package': {
@@ -510,9 +583,28 @@ async function handleTool(name, args) {
       return settings.writeSettings(args.patch || {}, 'user');
     }
 
-    case 'get_api_status':
+    case 'get_api_status': {
+      // Bug3 fix: do a live micro-probe to detect credit depletion vs key-present
+      let aiStatus = '✗ MISSING — set ANTHROPIC_API_KEY in .env';
+      if (cfg.ANTHROPIC_KEY) {
+        try {
+          const { Anthropic: _A } = require('@anthropic-ai/sdk');
+          await new _A({ apiKey: cfg.ANTHROPIC_KEY }).messages.create({
+            model:'claude-haiku-4-5-20251001', max_tokens:1,
+            messages:[{role:'user',content:'ping'}]
+          });
+          aiStatus = '✓ key valid + credits OK';
+        } catch(e) {
+          if (e.message && e.message.includes('credit balance'))
+            aiStatus = '⚠ KEY VALID but CREDITS DEPLETED — top up at console.anthropic.com/settings/billing';
+          else if (e.status === 401)
+            aiStatus = '✗ KEY INVALID or EXPIRED — replace in .env';
+          else
+            aiStatus = `⚠ key present, probe error: ${e.message}`;
+        }
+      }
       return {
-        claude_ai:  { configured: !!cfg.ANTHROPIC_KEY, required_for:'AI captions + hooks', env_key:'ANTHROPIC_API_KEY', status: cfg.ANTHROPIC_KEY ? '✓ key present' : '✗ MISSING — set in .env' },
+        claude_ai:  { configured: !!cfg.ANTHROPIC_KEY, required_for:'AI captions + hooks', env_key:'ANTHROPIC_API_KEY', status: aiStatus },
         giphy:      { configured: !!cfg.GIPHY_KEY,     required_for:'GIF search',           env_key:'GIPHY_API_KEY',    status: cfg.GIPHY_KEY ? '✓ key present' : '✗ MISSING' },
         pexels:     { configured: !!process.env.PEXELS_API_KEY, required_for:'Stock images', env_key:'PEXELS_API_KEY', status: process.env.PEXELS_API_KEY ? '✓ key present' : '✗ MISSING — free at pexels.com/api' },
         instagram:  { configured: !!process.env.INSTAGRAM_ACCESS_TOKEN, required_for:'Auto-post to Instagram', env_key:'INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID', status:'✗ Not configured — requires Meta Business App' },
@@ -520,6 +612,7 @@ async function handleTool(name, args) {
         ffmpeg:     { configured: true, required_for:'Video + audio processing', status:'✓ /usr/bin/ffmpeg' },
         tip:        'Edit /home/kamau/lavira-media-engine/.env then restart: tmux send-keys -t lavira "npm start" Enter'
       };
+    }
 
     case 'get_daily_schedule':
       try { return require('../scheduler').getSchedule(); } catch { return { entries:[] }; }
@@ -900,6 +993,14 @@ async function handleTool(name, args) {
       // Re-read in case buildReadyToPostPackage updates it
       try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
 
+      // Update DB with ALL output filenames (raw + overlay/post-ready)
+      try {
+        const rawOutputs = (result.results || []).map(r => r.filename).filter(Boolean);
+        const postReadyOutputs = (pkg.postReady || []).map(r => r.filename || r.file).filter(Boolean).map(f => require('path').basename(f));
+        const allOutputs = [...new Set([...rawOutputs, ...postReadyOutputs])];
+        log.update(jobId, { outputs: allOutputs });
+      } catch(e) { /* non-fatal */ }
+
       return {
         workflow: 'create_post_workflow',
         jobId,
@@ -946,7 +1047,7 @@ async function handleTool(name, args) {
     case 'list_posts': {
       const POSTS_DIR = path.join(__dirname, '..', '..', 'posts');
       const platform = args.platform || 'all';
-      const platforms = platform === 'all' ? ['instagram','facebook','tiktok','mcp-tasks','archive'] : [platform];
+      const platforms = platform === 'all' ? ['instagram','facebook','tiktok','whatsapp','mcp-tasks','archive'] : [platform];
       const result = {};
       for (const pl of platforms) {
         const d = path.join(POSTS_DIR, pl);
@@ -983,9 +1084,10 @@ async function handleTool(name, args) {
 
     // ─── ROTATION & DEDUP ────────────────────────────────────────────────────
     case 'get_destination_rotation_status': {
+      // Bug4 fix: return plain object, server serialiser wraps it
       const { rotationStatus } = require('../orchestrator/memory');
       const status = rotationStatus.get(BRAND.destinations);
-      return { content:[{ type:'text', text: JSON.stringify(status, null, 2) }] };
+      return status;
     }
 
     case 'check_content_duplicate': {
@@ -1034,6 +1136,182 @@ async function handleTool(name, args) {
       return { content:[{ type:'text', text: JSON.stringify(list, null, 2) }] };
     }
 
+
+    case 'smart_generate': {
+      const parsed = intent.parseIntent(args.prompt || '');
+      const dest = args.overrideDestination || parsed.destination || undefined;
+      const theme = args.overrideTheme || parsed.theme;
+      const platform = args.overridePlatform || parsed.platform;
+      const profiles = (intent.PLATFORM_MAP[platform] || intent.PLATFORM_MAP['default']).profiles;
+      const mediaType = parsed.mediaType;
+      const wfResult = await handleTool('create_post_workflow', {
+        destination: dest, theme, mediaType,
+        context: platform + ' post for ' + theme,
+        profiles,
+      });
+      const deliveryDir = path.join(cfg.OUTPUTS_DIR, platform);
+      fs.mkdirSync(deliveryDir, { recursive: true });
+      const delivered = [];
+      const jobFiles = (wfResult.results || wfResult.postReady || []);
+      for (const r of jobFiles) {
+        if (r && r.filename) {
+          const srcFile = path.join(cfg.OUTPUTS_DIR, r.filename);
+          if (fs.existsSync(srcFile)) {
+            const dstFile = path.join(deliveryDir, r.filename);
+            fs.copyFileSync(srcFile, dstFile);
+            delivered.push({ platform, filename: r.filename, url: '/outputs/' + platform + '/' + r.filename, resolution: r.resolution });
+          }
+        }
+      }
+      // AUTO-SAVE to posts/<platform>/ (permanent home)
+      const VALID_PLATS = ['instagram','facebook','tiktok','whatsapp','mcp-tasks','archive'];
+      const postsPlat = VALID_PLATS.includes(platform) ? platform : 'mcp-tasks';
+      const postsPlatDir = require('path').join(__dirname, '..', '..', 'posts', postsPlat);
+      fs.mkdirSync(postsPlatDir, { recursive: true });
+      const postsDelivered = [];
+      for (const r2 of (delivered.length ? delivered : jobFiles)) {
+        if (r2 && r2.filename) {
+          const srcF2 = require('path').join(cfg.OUTPUTS_DIR, require('path').basename(r2.filename));
+          if (fs.existsSync(srcF2)) {
+            const dstF2 = require('path').join(postsPlatDir, require('path').basename(r2.filename));
+            if (!fs.existsSync(dstF2)) fs.copyFileSync(srcF2, dstF2);
+            postsDelivered.push({ filename: require('path').basename(r2.filename), url: '/posts/' + postsPlat + '/' + require('path').basename(r2.filename) });
+          }
+        }
+      }
+      return {
+        orchestrated: true,
+        intent: parsed,
+        destination: dest || wfResult.destination,
+        theme, platform, mediaType,
+        jobId: wfResult.jobId,
+        caption: (wfResult.promo || {}).caption || '',
+        hook: (wfResult.promo || {}).hook || wfResult.hook || '',
+        hashtags: (wfResult.promo || {}).hashtags || [],
+        outputs: delivered.length ? delivered : jobFiles,
+        posts: postsDelivered,
+        message: 'Post generated for ' + platform + '. ' + (delivered.length || jobFiles.length) + ' file(s) ready. Auto-saved to posts/' + postsPlat + '/',
+        downloadFirst: postsDelivered.length ? ('/posts/' + postsPlat + '/' + postsDelivered[0].filename) : (delivered.length ? ('/outputs/' + platform + '/' + delivered[0].filename) : null),
+      };
+    }
+
+    case 'image_metadata': {
+      const fp = resolveMediaPath(args.filePath);
+      return await imageEnh.extractMetadata(fp);
+    }
+
+    case 'image_smart_crop': {
+      const fp = resolveMediaPath(args.filePath);
+      return await imageEnh.smartCrop(fp, args.targetW, args.targetH);
+    }
+
+    case 'image_compare': {
+      const fpA = resolveMediaPath(args.filePathA), fpB = resolveMediaPath(args.filePathB);
+      return await imageEnh.compareImages(fpA, fpB);
+    }
+
+    case 'image_ocr_prepare': {
+      const fp = resolveMediaPath(args.filePath);
+      return await imageEnh.prepareForOCR(fp);
+    }
+
+    case 'image_analyze_colors': {
+      const fp = resolveMediaPath(args.filePath);
+      return await imageEnh.analyzeColors(fp);
+    }
+
+    case 'image_export_platform': {
+      const fp = resolveMediaPath(args.filePath);
+      return await imageEnh.exportForPlatform(fp, args.platform);
+    }
+
+    case 'image_build_collage': {
+      const paths2 = (args.filePaths || []).map(resolveMediaPath);
+      return await imageEnh.buildCollage(paths2);
+    }
+
+    case 'video_probe': {
+      const fp = resolveMediaPath(args.filePath);
+      return await videoEnh.probeVideo(fp);
+    }
+
+    case 'video_clip': {
+      const fp = resolveMediaPath(args.filePath);
+      return await videoEnh.clipVideo(fp, args.startSec || 0, args.durationSec || 15);
+    }
+
+    case 'video_encode_platform': {
+      const fp = resolveMediaPath(args.filePath);
+      return await videoEnh.encodeForPlatform(fp, args.platform, { startSec: args.startSec, maxSeconds: args.maxSeconds });
+    }
+
+    case 'video_add_watermark': {
+      const fp = resolveMediaPath(args.filePath);
+      return await videoEnh.addBrandWatermark(fp, { destination: args.destination });
+    }
+
+    case 'video_to_reel': {
+      const fp = resolveMediaPath(args.imagePath);
+      return await videoEnh.imageToVideo(fp, args.durationSec || 15, args.platform || 'instagram_reel');
+    }
+
+    case 'full_video_post_pipeline': {
+      const postsDir = path.join(__dirname, '..', '..', 'posts');
+      return await videoEnh.fullVideoPostPipeline({
+        query: args.query || args.destination || 'Kenya safari wildlife',
+        destination: args.destination || '',
+        platform: args.platform || 'tiktok',
+        durationSec: args.durationSec || 30,
+        postsDir,
+      });
+    }
+
+    case 'video_search_stock': {
+      return await videoEnh.searchPexelsVideo(args.query, args.limit || 5);
+    }
+
+    case 'get_user_memory': {
+      const memPath = path.join(__dirname, '..', '..', 'LAVIRA_USER_MEMORY.md');
+      if (!fs.existsSync(memPath)) return { error: 'Memory doc not found' };
+      return { content: fs.readFileSync(memPath, 'utf8'), path: memPath };
+    }
+
+
+    case 'update_user_memory': {
+      const _mp = require('path').join(__dirname, '..', '..', 'LAVIRA_USER_MEMORY.md');
+      let _mc = fs.existsSync(_mp) ? fs.readFileSync(_mp, 'utf8') : '';
+      const _sec = (args.section || '').replace(/^#+\s*/, '').trim();
+      const _nc = args.content || '';
+      const _mode = args.mode || 'append';
+      if (_sec) {
+        const _hdr = '## ' + _sec;
+        const _idx = _mc.indexOf(_hdr);
+        if (_idx !== -1) {
+          const _end = _mc.indexOf('\n## ', _idx + _hdr.length);
+          const _blk = _end !== -1 ? _mc.slice(_idx, _end) : _mc.slice(_idx);
+          const _nb = _mode === 'replace' ? (_hdr + '\n' + _nc) : (_blk.trimEnd() + '\n' + _nc);
+          _mc = _end !== -1 ? (_mc.slice(0,_idx) + _nb + '\n' + _mc.slice(_end)) : (_mc.slice(0,_idx) + _nb + '\n');
+        } else { _mc += '\n' + _hdr + '\n' + _nc + '\n'; }
+      } else { _mc += '\n' + _nc + '\n'; }
+      fs.writeFileSync(_mp, _mc, 'utf8');
+      return { success: true, section: _sec || 'appended', mode: _mode };
+    }
+
+    case 'cleanup_old_outputs': {
+      const _days = args.olderThanDays || 14;
+      const _dry = args.dryRun === true;
+      const _cut = Date.now() - _days * 86400000;
+      const _od = cfg.OUTPUTS_DIR;
+      const _del = [], _skip = [];
+      if (fs.existsSync(_od)) {
+        for (const _f of fs.readdirSync(_od)) {
+          const _fp = require('path').join(_od, _f);
+          try { const _st = fs.statSync(_fp); if (_st.isFile() && _st.mtimeMs < _cut) { if (_dry) _skip.push(_f); else { fs.unlinkSync(_fp); _del.push(_f); } } }
+          catch(_e) { _skip.push(_f); }
+        }
+      }
+      return { deleted: _del, skipped: _skip, dryRun: _dry, olderThanDays: _days, message: (_dry?'DRY RUN: ':'')+_del.length+' deleted' };
+    }
 
     default:
       throw new Error('Unknown tool: ' + name);
