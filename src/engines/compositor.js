@@ -294,23 +294,23 @@ async function compositeVideo(inputPath, overlayOpts = {}) {
       // Amber accent line
       `drawbox=x=0:y=ih*0.10-2:w=iw:h=2:color=0xF4A261@0.70:t=fill`,
       // Brand name (w-relative font)
-      `drawtext=text='${dte(topText)}':fontcolor=white:fontsize=w*0.034:fontweight=bold:x=iw*0.155:y=ih*0.032:shadowcolor=black@0.5:shadowx=1:shadowy=1`,
+      `drawtext=text='${dte(topText)}':fontcolor=white:fontsize=w*0.034:x=iw*0.155:y=ih*0.032:shadowcolor=black@0.5:shadowx=1:shadowy=1`,
       // Tagline
       `drawtext=text='${dte(tagText)}':fontcolor=#F4A261:fontsize=w*0.020:x=iw*0.155:y=ih*0.068:shadowcolor=black@0.4:shadowx=1:shadowy=1`,
       // Destination chip right-side top bar
       destination ? `drawtext=text='📍 ${dte(destination)}':fontcolor=#F4A261:fontsize=w*0.019:x=iw*0.68:y=ih*0.045:shadowcolor=black@0.4:shadowx=1:shadowy=1` : null,
       // Promo badge
-      promoType ? `drawtext=text='${dte(promoType.toUpperCase())}':fontcolor=#1B2830:fontsize=w*0.018:fontweight=bold:x=iw*0.03:y=ih*0.115:box=1:boxcolor=#F4A261:boxborderw=10` : null,
+      promoType ? `drawtext=text='${dte(promoType.toUpperCase())}':fontcolor=#1B2830:fontsize=w*0.018:x=iw*0.03:y=ih*0.115:box=1:boxcolor=#F4A261:boxborderw=10` : null,
       // Hook band — lower third (72%–82%), not center
       hookText ? `drawbox=x=0:y=ih*0.72:w=iw:h=ih*0.10:color=0x1B2830@0.62:t=fill` : null,
       hookText ? `drawbox=x=0:y=ih*0.72:w=4:h=ih*0.10:color=0xF4A261@1.0:t=fill` : null,
-      hookText ? `drawtext=text='${dte(hookText)}':fontcolor=#F4A261:fontsize=w*0.038:fontweight=bold:x=iw*0.045:y=ih*0.750:box=1:boxcolor=black@0.35:boxborderw=8:shadowx=1:shadowy=1` : null,
+      hookText ? `drawtext=text='${dte(hookText)}':fontcolor=#F4A261:fontsize=w*0.038:x=iw*0.045:y=ih*0.750:box=1:boxcolor=black@0.35:boxborderw=8:shadowx=1:shadowy=1` : null,
       // Destination in hook band
       hookText && destination ? `drawtext=text='📍 ${dte(destination)}':fontcolor=white@0.80:fontsize=w*0.022:x=iw*0.045:y=ih*0.800:shadowx=1:shadowy=1` : null,
       // Bottom contact bar
       `drawbox=x=0:y=ih*0.87:w=iw:h=ih*0.13:color=0x1B2830@0.82:t=fill`,
       `drawbox=x=0:y=ih*0.87:w=iw:h=2:color=0xF4A261@0.55:t=fill`,
-      `drawtext=text='📞 ${dte(phone)}':fontcolor=#F4A261:fontsize=w*0.024:fontweight=bold:x=iw*0.05:y=ih*0.907:shadowx=1:shadowy=1`,
+      `drawtext=text='📞 ${dte(phone)}':fontcolor=#F4A261:fontsize=w*0.024:x=iw*0.05:y=ih*0.907:shadowx=1:shadowy=1`,
       `drawtext=text='🌐 ${dte((website||'').replace('https://',''))}':fontcolor=white@0.82:fontsize=w*0.021:x=iw*0.05:y=ih*0.942:shadowx=1:shadowy=1`,
     ].filter(Boolean);
 

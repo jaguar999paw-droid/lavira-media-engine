@@ -1,4 +1,4 @@
-# 🦁 Lavira Media Engine — v1.4.0
+# 🦁 Lavira Media Engine — v1.5.0
 
 > **AI-powered safari marketing content engine** — generates branded Instagram posts, videos, and audio for safari companies, fully controllable via an MCP server that plugs directly into Claude Desktop or any MCP-compatible AI agent.
 
@@ -21,15 +21,18 @@ Lavira Media Engine automates the full content pipeline for safari marketing:
 - **Processes audio** — normalises to broadcast standard (-16 LUFS), exports OGG/MP3
 - **Publishes directly** to Instagram, Facebook, and TikTok (with tokens)
 - **Runs a scheduler** — auto-generates daily promos at 06:00 EAT
-- **Exposes 52 MCP tools** so Claude Desktop (or any AI agent) can control the entire pipeline conversationally
+- **Exposes 77 MCP tools** so Claude Desktop (or any AI agent) can control the entire pipeline conversationally
 - **`sync.sh`** — one-command local ↔ GitHub sync with `--release` flag to tag and trigger CI automatically
 
 ---
 
-## What's new in v1.4.0
+## What's new in v1.5.0
 
 | Area | Change |
 |------|--------|
+| 🎬 **Video processing** | Fixed `fontweight=bold` FFmpeg 4.x crash — `Option not found` error on `drawtext` filter eliminated |
+| 🦁 **Logo loader** | Local-first priority chain: PNG cache → local SVG → network. Compositing never fails due to DNS/network issues |
+| 📊 **MCP tool count** | Corrected from 52 → **77 tools** across all docs, README, architecture diagram |
 | 🧠 **Intelligence Router** | Vision signals now drive palette, layout, hook tone, and CTA style per post |
 | 👁 **Claude Vision pipeline** | Safe-text-zone detection + scene mood analysis before every composite |
 | 🪟 **Windows installer** | TLS 1.2 enforcement, binary signature checks, `-ScriptDir` param fix, `keys.env` whitespace fix |
@@ -55,7 +58,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 │  │  ├─ REST API     │     │  ├─ RPC  → /rpc          │  │
 │  │  │  /api/*       │     │  └─ Health → /health     │  │
 │  │  └─ Static files │     │                          │  │
-│  │     /outputs/*   │     │  52 tools exposed        │  │
+│  │     /outputs/*   │     │  77 tools exposed        │  │
 │  └────────┬─────────┘     └──────────┬───────────────┘  │
 │           │                          │                   │
 │           └──────── lavira-net ───────┘                  │
@@ -209,7 +212,7 @@ curl http://localhost:4005/api/health
 # Expected: {"status":"ok","engine":"Lavira Media Engine v3.0",...}
 
 curl http://localhost:4006/health
-# Expected: {"status":"ok","tools":52}
+# Expected: {"status":"ok","tools":77}
 ```
 
 ---
@@ -300,7 +303,7 @@ Copy `.env.example` → `.env` and fill in your values. The engine runs in degra
 
 ## MCP Integration
 
-The MCP server is the primary interface for AI agents. It exposes **52 tools** covering the full content pipeline.
+The MCP server is the primary interface for AI agents. It exposes **77 tools** covering the full content pipeline.
 
 ### Connect Claude Desktop
 
@@ -349,47 +352,87 @@ RPC endpoint:  http://localhost:4006/rpc
 Health check:  http://localhost:4006/health
 ```
 
-### Available MCP Tools (26)
+### Available MCP Tools (77)
 
 | Category | Tool | What it does |
 |----------|------|-------------|
-| **Workflows** | `create_post_workflow` | End-to-end: fetch media → brand → caption → package |
+| **Master Workflow** | `smart_generate` | Natural-language master orchestrator — parse prompt and run full pipeline |
+| | `create_post_workflow` | End-to-end: fetch media → brand → caption → package |
 | | `generate_auto_promo` | Zero-input: picks destination, fetches stock image, brands it |
 | | `generate_promo_package` | AI caption + hook + CTA + hashtags for any destination |
 | | `generate_marketing_payload` | Full marketing content package |
-| **Media** | `fetch_optimal_media` | Fetch best-matching Pexels photo/video for a destination |
-| | `search_stock_images` | Search Pexels by keyword |
-| | `search_external_media` | Search Pexels + Unsplash with intelligent ranking |
-| | `process_image` | Crop, rotate, color-correct an uploaded photo |
-| | `process_video` | Auto-crop + watermark a video |
-| | `process_audio` | Normalise audio to broadcast standard |
+| **Video** | `process_video` | Auto-crop + watermark a video for one platform |
+| | `video_probe` | Inspect video: duration, resolution, fps, codec, audio |
+| | `video_clip` | Trim a video segment by start + duration |
+| | `video_encode_platform` | Encode video to exact platform spec (9 platforms) |
+| | `video_add_watermark` | Burn Lavira brand watermark directly into video |
+| | `video_to_reel` | Animate a static image into a Ken Burns zoom reel |
+| | `full_video_post_pipeline` | Search Pexels → download → probe → clip → encode in one call |
+| | `video_search_stock` | Search Pexels for portrait safari stock videos |
+| **Image** | `process_image` | Crop, rotate, color-correct an uploaded photo |
+| | `image_metadata` | Extract full metadata: dimensions, format, file size, megapixels |
+| | `image_smart_crop` | Entropy-based smart crop to target ratio |
+| | `image_compare` | Side-by-side A/B comparison of two images |
+| | `image_ocr_prepare` | Pre-process image for OCR: greyscale + normalise + sharpen |
+| | `image_analyze_colors` | Analyse dominant color, brightness, mood |
+| | `image_export_platform` | Resize and optimise for a specific social platform |
+| | `image_build_collage` | Build a 2×2 grid collage from 2–4 images |
+| **Audio** | `process_audio` | Normalise audio to broadcast standard, export timed clips |
+| | `mix_audio_with_media` | Attach music to image or video; images become 9:16 MP4 |
 | **Branding** | `apply_overlay` | Add logo + contact bar to any image |
 | | `make_ready_to_post` | Full branded overlay with hook, destination, promo type |
-| | `generate_branded_media` | Analyze + brand in one call |
-| | `generate_card_template` | One of 10 SVG card designs |
-| | `generate_all_cards` | All 10 card variants at once |
+| | `build_post_package` | Apply overlays to all job outputs, return with caption |
+| | `generate_branded_media` | Analyze + brand in one call with intelligent theming |
+| | `generate_card_template` | One of 10 SVG card designs (hero, package, testimonial…) |
+| | `generate_all_cards` | All 10 card variants for a destination at once |
+| | `generate_overlay_plan` | Analyse safe-text zones and return optimal positioning plan |
+| | `analyze_content_theme` | Map animal/scene to creative theme (lion=power, etc.) |
 | **GIPHY** | `search_giphy` | Search GIPHY for safari GIFs |
-| | `use_giphy` | Download GIF + generate branded promo |
-| **Jobs** | `list_recent_jobs` | History of generated content |
+| | `use_giphy` | Download GIF as MP4 + generate branded promo |
+| **External Media** | `search_stock_images` | Search Pexels by keyword (images) |
+| | `search_external_media` | Search Pexels + Unsplash with intelligent ranking |
+| | `fetch_optimal_media` | Fetch best-matching media for a destination/theme |
+| | `cache_stats` | External media cache info |
+| | `cache_clear` | Clear all cached media |
+| | `cache_prune` | Remove stale cache entries (>30 days) |
+| **Sample Media** | `list_sample_media` | List bundled sample media by destination/type/theme |
+| | `get_sample_media` | Get sample files for a destination (test without upload) |
+| | `process_sample_as_test` | Run full pipeline on a sample — demo mode |
+| | `batch_process_samples` | Process all samples in a destination folder |
+| **Jobs** | `list_recent_jobs` | History of generated content with status |
 | | `get_job_status` | Poll a specific job |
 | | `approve_job` | Mark job approved, log it |
 | | `reject_job` | Flag job for redo |
-| **Publishing** | `post_to_instagram` | Publish to Instagram (token required) |
+| | `get_share_package` | Caption, hook, hashtags, per-platform download links |
+| | `list_output_files` | List all files in outputs directory |
+| | `delete_output_file` | Delete a specific output file |
+| | `save_to_posts` | Copy output to posts/ subfolder |
+| | `list_posts` | List files in posts/ directory |
+| | `cleanup_old_outputs` | Delete output files older than N days |
+| **Publishing** | `post_to_instagram` | Publish to Instagram Reels, Feed, or Stories |
 | | `post_to_facebook` | Publish to Facebook Page |
 | | `post_to_tiktok` | Publish to TikTok |
 | | `publish_job` | Publish to multiple platforms at once |
-| | `schedule_post` | Schedule for a specific time |
-| **System** | `get_brand_info` | Full brand dictionary |
-| | `get_api_status` | Which integrations are active |
+| | `schedule_post` | Schedule job for a specific time |
+| **Video Script** | `generate_video_script` | Structured multi-part script with timing, hook, B-roll, music mood |
+| **Bookings** | `record_booking` | Manually record a confirmed safari booking |
+| | `trigger_post_booking_flow` | Auto-generate social content for a booking |
+| | `list_booking_events` | Recent bookings with guest details and travel dates |
+| **Schedule** | `get_daily_schedule` | Today's auto-generated promo schedule |
+| | `trigger_daily_promo` | Run daily promo now (normally 06:00 EAT) |
+| **Memory** | `get_user_memory` | Read Lavira user memory + productivity profile |
+| | `update_user_memory` | Append or replace a memory section |
+| | `get_destination_rotation_status` | Per-destination posting frequency and LRU priority |
+| | `check_content_duplicate` | Check if a caption is too similar to a recent post |
+| **AI** | `ask_claude` | Send custom prompt to Claude AI |
+| **System** | `get_brand_info` | Full brand dictionary: name, contacts, destinations, packages |
+| | `get_api_status` | Which API integrations are active |
 | | `get_safari_packages` | All safari packages with pricing |
 | | `get_destinations_to_feature` | LRU-ranked destination recommendations |
-| | `get_daily_schedule` | Today's auto-generated schedule |
-| | `trigger_daily_promo` | Run daily promo now |
 | | `get_admin_settings` | Read persisted settings |
 | | `update_admin_settings` | Update settings |
-| **Cache** | `cache_stats` | External media cache info |
-| | `cache_clear` | Clear all cached media |
-| | `cache_prune` | Remove stale cache entries |
+| | `get_engine_health` | FFmpeg status, disk space, active jobs, all API statuses |
+| | `list_upload_files` | List files in uploads directory |
 
 ### Example Conversations with Claude
 

@@ -2,6 +2,18 @@
 
 All notable changes to Lavira Media Engine are documented here.
 
+## [1.5.0] — 2026-04-30
+
+### Fixed
+- **`src/engines/compositor.js`** — Removed `fontweight=bold` from all `drawtext` FFmpeg filter strings. FFmpeg 4.4.2 (Ubuntu 22.04) does **not** support `fontweight` as a `drawtext` option; it was triggering `Error reinitializing filters! Failed to inject frame into filter network: Option not found` (exit code 1) on every video overlay call. All four affected `drawtext` calls in the video compositor now use font-size scaling instead of weight hints.
+- **`src/engines/logo-loader.js`** — Replaced network-first logo loading with a **local-first priority chain**: (1) in-process SVG buffer, (2) pre-rendered `assets/brand/logo_300.png` (fast resize via sharp), (3) local `assets/brand/logo.svg`, (4) network fetch as last resort. PNG cache is validated on start-up and rebuilt if corrupt (<200 bytes). This means the Lavira logo composites correctly even when `lavirasafaris.com` is unreachable.
+
+### Changed
+- **`README.md`** — Corrected MCP tool count from **52 → 77** in all five locations (feature list, architecture diagram, API health check example, MCP Integration section, and tools table header). Expanded tools reference table from 26 → 77 entries covering all current categories (Master Workflow, Video, Image, Audio, Branding, GIPHY, External Media, Sample Media, Jobs, Publishing, Video Script, Bookings, Schedule, Memory, AI, System).
+- **`package.json`** — Version bumped to `1.5.0`.
+
+---
+
 ## [1.4.0] — 2026-04-29
 
 ### Added
