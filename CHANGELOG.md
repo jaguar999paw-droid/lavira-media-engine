@@ -2,6 +2,20 @@
 
 All notable changes to Lavira Media Engine are documented here.
 
+## [1.5.1] — 2026-04-30
+
+### Added
+- **`.github/workflows/windows-package.yml`** — CI now injects pre-filled `keys.env` from GitHub Actions secrets (`ANTHROPIC_API_KEY`, `PEXELS_API_KEY`, `GIPHY_API_KEY`) at build time. The file is written with `printf` (no leading whitespace) before zipping, so the Windows installer runs fully zero-touch — no Notepad prompt, no manual key entry. Keys are **never committed to git** (still gitignored); they live only inside the encrypted secrets store and are redacted in CI logs. Social publishing tokens (Instagram, Facebook, TikTok) are included blank for the user to fill later via Tailscale SSH.
+
+### Changed
+- **`windows/SETUP.md`** — Corrected Claude Desktop tool count from 52 → **77** in the installed components table.
+- **`package.json`** — Version bumped to `1.5.1`.
+
+### Notes
+- To replace any key after install: SSH into the Windows machine via Tailscale → edit `~/lavira-media-engine/.env` → run `docker compose restart`.
+
+---
+
 ## [1.5.0] — 2026-04-30
 
 ### Fixed

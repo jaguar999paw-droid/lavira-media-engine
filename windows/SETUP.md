@@ -64,7 +64,7 @@ Add under: Claude Desktop → Settings → Developer → MCP Servers
 | Component | Purpose |
 |-----------|---------|
 | Docker Desktop | Runs the Lavira engine in the background |
-| Claude Desktop | Pre-wired to all 52 Lavira MCP tools |
+| Claude Desktop | Pre-wired to all 77 Lavira MCP tools |
 | Lavira engine files | Saved to `C:\Users\<you>\lavira-media-engine` |
 | Auto-start shortcut | Engine starts automatically when you log in |
 | Tailscale + SSH | Allows remote support and management |

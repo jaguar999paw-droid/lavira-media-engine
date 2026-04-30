@@ -17,6 +17,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Windows setup ZIP
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
         run: |
           mkdir -p staging
 
@@ -32,11 +36,27 @@ jobs:
           cp windows/SETUP.md                    staging/
           cp windows/keys.env.example            staging/
 
-          # SECURITY: Real API keys are NEVER bundled in the public release ZIP.
-          # Distribute keys.env to clients separately (e-mail / WhatsApp).
-          # The installer falls back to Notepad if keys.env is absent.
-          echo "ZIP contents:"
+          # ── Inject pre-filled keys.env from CI secrets ────────────────────
+          # keys.env is gitignored and NEVER committed to the repo.
+          # It is written here at build time so the installer is zero-touch.
+          # The end user can replace any key later via Tailscale SSH:
+          #   nano ~/lavira-media-engine/.env
+          #   docker compose restart
+          printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY}" >  staging/keys.env
+          printf 'PEXELS_API_KEY=%s\n'    "${PEXELS_API_KEY}"    >> staging/keys.env
+          printf 'GIPHY_API_KEY=%s\n'     "${GIPHY_API_KEY}"     >> staging/keys.env
+
+          # Social publishing tokens — blank by default, filled by user later
+          printf 'INSTAGRAM_ACCESS_TOKEN=\n' >> staging/keys.env
+          printf 'INSTAGRAM_USER_ID=\n'      >> staging/keys.env
+          printf 'FACEBOOK_ACCESS_TOKEN=\n'  >> staging/keys.env
+          printf 'FACEBOOK_PAGE_ID=\n'       >> staging/keys.env
+          printf 'TIKTOK_ACCESS_TOKEN=\n'    >> staging/keys.env
+
+          echo "── Staging contents ──"
           ls -lah staging/
+          echo "── keys.env written (values redacted) ──"
+          sed 's/=.*/=***/' staging/keys.env
 
           cd staging
           zip -r ../lavira-media-engine-windows-setup.zip .
@@ -57,7 +77,7 @@ jobs:
           body: |
             ## Lavira Media Engine ${{ github.ref_name }}
 
-            > AI-powered safari content platform — web studio + Claude MCP tools.
+            > AI-powered safari content platform — web studio + 77 Claude MCP tools.
 
             ---
 
@@ -91,9 +111,11 @@ jobs:
 
             **What gets installed automatically:**
             - Docker Desktop (runs the engine)
-            - Claude Desktop (pre-wired to Lavira MCP tools)
+            - Claude Desktop (pre-wired to 77 Lavira MCP tools)
             - Lavira engine files
             - Auto-start on login
+
+            > To swap API keys later, SSH in via Tailscale and edit `~/lavira-media-engine/.env`, then run `docker compose restart`.
 
             ---
 

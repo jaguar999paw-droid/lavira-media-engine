@@ -1,6 +1,6 @@
 {
   "name": "lavira-media-engine",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Lavira Safaris \u2013 Automated Social Media Content Engine",
   "main": "src/server.js",
   "scripts": {
