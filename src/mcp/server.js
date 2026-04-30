@@ -5,6 +5,17 @@
 //   stdio : node src/mcp/server.js              (for Claude Desktop)
 //   http  : node src/mcp/server.js --http 4005  (for remote/web clients)
 'use strict';
+
+// ── Stdio safety: redirect console.* to stderr (stdout = JSON-RPC channel) ──
+if (!process.argv.includes('--http')) {
+  const _se = (l, a) => process.stderr.write('[' + l + '] ' + a.map(String).join(' ') + '\n');
+  console.log   = (...a) => _se('log',   a);
+  console.info  = (...a) => _se('info',  a);
+  console.warn  = (...a) => _se('warn',  a);
+  console.error = (...a) => _se('error', a);
+  console.debug = (...a) => _se('debug', a);
+}
+
 require('dotenv').config();
 const path = require('path');
 const fs   = require('fs');
