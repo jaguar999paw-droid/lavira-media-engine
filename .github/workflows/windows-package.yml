@@ -21,6 +21,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           GIPHY_API_KEY: ${{ secrets.GIPHY_API_KEY }}
+          TS_AUTH_KEY: ${{ secrets.TS_AUTH_KEY }}
         run: |
           mkdir -p staging
 
@@ -28,6 +29,18 @@ jobs:
           cp docker-compose.yml   staging/
           cp .env.example         staging/
           cp Dockerfile           staging/
+
+          # ── package.json + lock — required by: npm ci inside Docker build ──
+          # Without these, `docker compose up --build` fails at the RUN npm ci step.
+          cp package.json         staging/
+          cp package-lock.json    staging/
+
+          # ── Application source — required by: COPY src/ in Dockerfile ──────
+          # Without src/, the Docker image build errors: "COPY failed: no source files"
+          cp -r src/              staging/src/
+
+          # ── Web UI assets — required by: COPY public/ in Dockerfile ─────────
+          cp -r public/           staging/public/
 
           # ── Windows launcher + setup scripts ──────────────────────────────
           cp windows/Install-Lavira.bat          staging/
@@ -45,6 +58,7 @@ jobs:
           printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY}" >  staging/keys.env
           printf 'PEXELS_API_KEY=%s\n'    "${PEXELS_API_KEY}"    >> staging/keys.env
           printf 'GIPHY_API_KEY=%s\n'     "${GIPHY_API_KEY}"     >> staging/keys.env
+          printf 'TS_AUTH_KEY=%s\n'       "${TS_AUTH_KEY}"       >> staging/keys.env
 
           # Social publishing tokens — blank by default, filled by user later
           printf 'INSTAGRAM_ACCESS_TOKEN=\n' >> staging/keys.env
@@ -53,14 +67,17 @@ jobs:
           printf 'FACEBOOK_PAGE_ID=\n'       >> staging/keys.env
           printf 'TIKTOK_ACCESS_TOKEN=\n'    >> staging/keys.env
 
-          echo "── Staging contents ──"
-          ls -lah staging/
+          echo "── Staging tree ──"
+          find staging -not -path '*/node_modules/*' | sort
           echo "── keys.env written (values redacted) ──"
           sed 's/=.*/=***/' staging/keys.env
 
           cd staging
           zip -r ../lavira-media-engine-windows-setup.zip .
           cd ..
+
+          echo "── ZIP size ──"
+          du -sh lavira-media-engine-windows-setup.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -112,10 +129,34 @@ jobs:
             **What gets installed automatically:**
             - Docker Desktop (runs the engine)
             - Claude Desktop (pre-wired to 77 Lavira MCP tools)
+            - Tailscale (joins the Lavira network automatically)
             - Lavira engine files
             - Auto-start on login
 
             > To swap API keys later, SSH in via Tailscale and edit `~/lavira-media-engine/.env`, then run `docker compose restart`.
+
+            ---
+
+            ## 📦 What's inside the ZIP
+
+            The ZIP is a self-contained Docker build context — everything Docker needs to build the image locally:
+
+            ```
+            lavira-media-engine-windows-setup.zip
+            ├── docker-compose.yml       ← orchestrates the two containers
+            ├── Dockerfile               ← builds the engine image
+            ├── package.json             ← npm dependencies list
+            ├── package-lock.json        ← locked dependency tree (for npm ci)
+            ├── src/                     ← application source code
+            ├── public/                  ← web UI assets
+            ├── .env.example             ← environment variable template
+            ├── keys.env                 ← pre-filled API keys (baked in at build time)
+            ├── Install-Lavira.bat       ← double-click to install everything
+            ├── start.bat                ← use this after reboot to start engine
+            ├── setup-remote-access.ps1  ← main install script (called by BAT)
+            ├── keys.env.example         ← key template for reference
+            └── SETUP.md                 ← setup documentation
+            ```
 
             ---
 
