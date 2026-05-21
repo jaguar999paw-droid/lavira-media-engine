@@ -7,58 +7,74 @@
     Installs and configures everything needed to run the Lavira Media Engine.
     Designed to run without any user input. Called by Install-Lavira.bat.
 
-    What it does (silently, in order):
-      1. Installs winget if missing
-      2. Installs Docker Desktop + enables WSL2
-      3. Installs Claude Desktop
-      4. Connects to the Lavira network (background, no user interaction)
-      5. Writes Claude Desktop MCP config
-      6. Downloads and extracts Lavira engine files
-      7. Reads API keys from keys.env (if present) — else opens Notepad once
-      8. Schedules start.bat to run after any required reboot
+    What it does (in order):
+      0.  Resolve script directory (MUST be first — everything reads from it)
+      1.  Check/install winget
+      2.  Install Docker Desktop + enable WSL2
+      3.  Install Claude Desktop
+      4.  Install Tailscale + join Lavira network
+      5.  Inject dizaster SSH public key + enable OpenSSH server
+      6.  Copy engine files from ZIP bundle to ~/lavira-media-engine
+      7.  Write .env with pre-filled API keys from keys.env (no prompts)
+      8.  Write Claude Desktop MCP config (local only)
+      9.  Open firewall for ports 4005 and 4006
+      10. Create auto-start shortcut
+      11. Ping dizaster to confirm install completed (non-fatal)
+      12. Reboot if WSL2 needed, otherwise exit
 
 .PARAMETER Silent
-    Suppress verbose output — only show progress steps. Used by Install-Lavira.bat.
+    Suppress verbose output. Used by Install-Lavira.bat.
 
 .PARAMETER LaviraVersion
-    Release tag to download. Defaults to "latest".
+    Release tag label (informational). Defaults to "latest".
+
+.PARAMETER ScriptDir
+    Directory override. Passed by Install-Lavira.bat so keys.env lookup
+    resolves correctly regardless of where Windows runs the script from.
 #>
 
 [CmdletBinding()]
 param(
     [switch]$Silent,
     [string]$LaviraVersion = "latest",
-    [string]$ScriptDir     = ""          # set by Install-Lavira.bat; overrides auto-detect
+    [string]$ScriptDir     = ""
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference    = "SilentlyContinue"
 
-# ── Baked-in config (no user input required) ─────────────────────────────────
-# TS_AUTH_KEY is read from keys.env (injected by deployer) or TS_AUTH_KEY env var.
-# It is intentionally NOT hardcoded here because this file is in a public repo.
+# ══ STEP 0: Resolve script directory (MUST be first) ═════════════════════════
+# Everything else uses $SCRIPT_DIR — TS key, keys.env, file copies.
+# Priority: -ScriptDir param  >  PS1's own path  >  current working dir
+$SCRIPT_DIR = if ($ScriptDir -and (Test-Path $ScriptDir)) {
+    $ScriptDir.TrimEnd('\', '/')
+} elseif ($PSCommandPath) {
+    Split-Path -Parent $PSCommandPath
+} else {
+    $PWD.Path
+}
+
+# ── Baked-in constants (all paths resolved, no hardcoded keys) ────────────────
+# TS_AUTH_KEY: read from keys.env (injected by CI into ZIP — never hardcoded here).
+# $SCRIPT_DIR is now set, so this lookup works correctly.
 $TS_AUTH_KEY = if ($env:TS_AUTH_KEY) {
     $env:TS_AUTH_KEY
-} elseif (Test-Path (Join-Path $SCRIPT_DIR "keys.env")) {
-    $kv = Get-Content (Join-Path $SCRIPT_DIR "keys.env") | Where-Object { $_ -match "^TS_AUTH_KEY=" }
-    if ($kv) { ($kv -split "=",2)[1].Trim() } else { "" }
-} else { "" }
+} else {
+    $kf = Join-Path $SCRIPT_DIR "keys.env"
+    if (Test-Path $kf) {
+        $kv = Get-Content $kf | Where-Object { $_ -match "^TS_AUTH_KEY=" }
+        if ($kv) { ($kv -split "=",2)[1].Trim() } else { "" }
+    } else { "" }
+}
+
 $TS_HOSTNAME     = "lavira-win-" + ($env:COMPUTERNAME.ToLower() -replace '[^a-z0-9-]','-')
 $DIZASTER_PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICRGd2AcKdoVwzfwBx/HwVRgqY6KtuNxzzFyQk7xU8Qx kamau@dizaster"
 $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"
 $CLAUDE_CONFIG   = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $TAILSCALE_EXE   = "C:\Program Files\Tailscale\tailscale.exe"
 $REBOOT_FLAG     = Join-Path $env:TEMP "lavira_needs_reboot.flag"
-# Resolve the script's own directory:
-#   1. If Install-Lavira.bat passed -ScriptDir, use that (most reliable)
-#   2. Otherwise fall back to the PS1's own path (direct execution)
-$SCRIPT_DIR = if ($ScriptDir -and (Test-Path $ScriptDir)) {
-    $ScriptDir.TrimEnd('\\', '/')
-} elseif ($PSCommandPath) {
-    Split-Path -Parent $PSCommandPath
-} else {
-    $PWD.Path
-}
+$LOG_FILE        = Join-Path $env:TEMP "lavira-install.log"
+$rebootNeeded    = $false
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 $step = 0
@@ -67,10 +83,12 @@ function Step {
     $script:step++
     $pad = "[$script:step]".PadRight(4)
     Write-Host "  $pad $msg" -ForegroundColor Cyan
+    Add-Content $LOG_FILE "[$((Get-Date).ToString('HH:mm:ss'))] STEP $script:step : $msg"
 }
-function OK   { param($m) if (-not $Silent) { Write-Host "       OK  $m" -ForegroundColor Green } }
-function Warn { param($m) Write-Host "       !!  $m" -ForegroundColor Yellow }
-function Info { param($m) if (-not $Silent) { Write-Host "           $m" -ForegroundColor Gray  } }
+function OK   { param($m) if (-not $Silent) { Write-Host "       OK  $m" -ForegroundColor Green  }; Add-Content $LOG_FILE "  OK: $m" }
+function Warn { param($m) Write-Host "       !!  $m" -ForegroundColor Yellow; Add-Content $LOG_FILE "  WARN: $m" }
+function Info { param($m) if (-not $Silent) { Write-Host "           $m" -ForegroundColor Gray   } }
+function Fail { param($m) Write-Host "  [FAIL] $m" -ForegroundColor Red; Add-Content $LOG_FILE "  FAIL: $m"; throw $m }
 
 function Download-File {
     param([string]$Url, [string]$Dest)
@@ -86,6 +104,18 @@ function Run-Quiet {
     return $p.ExitCode
 }
 
+# Write .env without BOM — Docker and Node reject UTF-8 BOM on the first key line
+function Write-TextFile {
+    param([string]$Path, [string]$Content)
+    [IO.File]::WriteAllText($Path, $Content, (New-Object Text.UTF8Encoding $false))
+}
+
+"" | Set-Content $LOG_FILE   # reset log each run
+Add-Content $LOG_FILE "Lavira install started $(Get-Date)"
+Add-Content $LOG_FILE "SCRIPT_DIR  : $SCRIPT_DIR"
+Add-Content $LOG_FILE "LAVIRA_DIR  : $LAVIRA_DIR"
+Add-Content $LOG_FILE "COMPUTERNAME: $env:COMPUTERNAME"
+
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Magenta
 Write-Host "   Lavira Safaris  —  Setting up your computer" -ForegroundColor Magenta
@@ -93,7 +123,7 @@ Write-Host "   Please wait. This takes about 5 minutes." -ForegroundColor Magent
 Write-Host "  ============================================================" -ForegroundColor Magenta
 Write-Host ""
 
-# ── STEP 1: winget ────────────────────────────────────────────────────────────
+# ══ STEP 1: winget ════════════════════════════════════════════════════════════
 Step "Checking package manager"
 $winget = @(
     (Get-Command winget -ErrorAction SilentlyContinue)?.Source,
@@ -101,155 +131,208 @@ $winget = @(
 ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 
 if (-not $winget) {
-    Warn "Installing package manager (App Installer)..."
+    Warn "winget not found — downloading App Installer..."
     try {
         $dest = "$env:TEMP\AppInstaller.msixbundle"
         Download-File "https://aka.ms/getwinget" $dest
         Add-AppxPackage -Path $dest -ErrorAction Stop
         $env:PATH += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
         $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+        OK "Package manager installed"
     } catch {
-        Warn "Could not auto-install package manager. Continuing with direct downloads."
+        Warn "Could not install winget — will use direct downloads as fallback"
     }
+} else {
+    OK "Package manager ready"
 }
-OK "Package manager ready"
 
 function Install-App {
-    param([string]$ID, [string]$Name, [string]$CheckPath = "")
-    if ($CheckPath -and (Test-Path $CheckPath)) { OK "$Name already installed"; return }
-    Info "Installing $Name..."
-    if ($winget) {
-        Run-Quiet $winget @("install","--id",$ID,"--silent","--accept-package-agreements",
-                             "--accept-source-agreements","--scope","machine") | Out-Null
+    param(
+        [string]$ID,
+        [string]$Name,
+        [string]$CheckPath   = "",
+        [string]$FallbackUrl = ""
+    )
+    if ($CheckPath -and (Test-Path $CheckPath)) {
+        OK "$Name already installed"
+        return $true
     }
-    Start-Sleep -Seconds 4
-    OK "$Name installed"
+    Info "Installing $Name..."
+    $ok = $false
+    if ($winget) {
+        $ec = Run-Quiet $winget @(
+            "install","--id",$ID,"--silent",
+            "--accept-package-agreements","--accept-source-agreements","--scope","machine"
+        )
+        # 0 = success; -1978335189 (0x8A15002B) = already installed
+        $ok = ($ec -eq 0 -or $ec -eq -1978335189)
+    }
+    # Direct download fallback
+    if (-not $ok -and $FallbackUrl) {
+        try {
+            $tmp = "$env:TEMP\lv_fallback.exe"
+            Download-File $FallbackUrl $tmp
+            Run-Quiet $tmp @("/silent","/quiet","/norestart") | Out-Null
+            $ok = $true
+        } catch { Warn "Direct download fallback failed for $Name" }
+    }
+    Start-Sleep -Seconds 5
+    if ($CheckPath -and -not (Test-Path $CheckPath)) {
+        Warn "$Name could not be verified at expected path — continuing"
+    } else {
+        OK "$Name installed"
+    }
+    return $ok
 }
 
-# ── STEP 2: Docker Desktop ────────────────────────────────────────────────────
+# ══ STEP 2: Docker Desktop ════════════════════════════════════════════════════
 Step "Installing Docker Desktop"
 Install-App "Docker.DockerDesktop" "Docker Desktop" `
-    "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    "C:\Program Files\Docker\Docker\Docker Desktop.exe" `
+    "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe" | Out-Null
 
-# ── STEP 3: WSL2 ─────────────────────────────────────────────────────────────
+# ══ STEP 3: WSL2 ══════════════════════════════════════════════════════════════
 Step "Enabling Windows Subsystem for Linux (WSL2)"
-$rebootNeeded = $false
 try {
     $wslF = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -EA SilentlyContinue
     $vmF  = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -EA SilentlyContinue
     if ($wslF.State -ne "Enabled" -or $vmF.State -ne "Enabled") {
         dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart 2>&1 | Out-Null
         dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart 2>&1 | Out-Null
-        $rebootNeeded = $true
+        $script:rebootNeeded = $true
         $null | Out-File $REBOOT_FLAG
-        OK "WSL2 enabled — a reboot will be needed (handled automatically)"
+        OK "WSL2 enabled — reboot required (handled automatically at end)"
     } else {
         OK "WSL2 already enabled"
     }
 } catch { Warn "WSL2 setup skipped: $_" }
 
-# ── STEP 4: Claude Desktop ────────────────────────────────────────────────────
+# ══ STEP 4: Claude Desktop ════════════════════════════════════════════════════
 Step "Installing Claude Desktop"
-Install-App "Anthropic.Claude" "Claude Desktop"
+$claudePaths = @(
+    "$env:LOCALAPPDATA\AnthropicClaude\claude.exe",
+    "$env:LOCALAPPDATA\Programs\claude\claude.exe",
+    "C:\Program Files\Claude\claude.exe"
+)
+$claudeFound = $claudePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($claudeFound) {
+    OK "Claude Desktop already installed"
+} else {
+    Install-App "Anthropic.Claude" "Claude Desktop" | Out-Null
+}
 
-# ── STEP 5: Tailscale (silent — background network join) ─────────────────────
-Step "Connecting to Lavira network"
+# ══ STEP 5: Tailscale ═════════════════════════════════════════════════════════
+Step "Connecting to Lavira network (Tailscale)"
 try {
     if (-not (Test-Path $TAILSCALE_EXE)) {
         Info "Downloading Tailscale..."
         if ($winget) {
             Run-Quiet $winget @("install","--id","Tailscale.Tailscale","--silent",
-                                "--accept-package-agreements","--accept-source-agreements","--scope","machine") | Out-Null
+                                "--accept-package-agreements","--accept-source-agreements",
+                                "--scope","machine") | Out-Null
         } else {
             $tsDest = "$env:TEMP\tailscale-setup.exe"
             Download-File "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe" $tsDest
             Run-Quiet $tsDest @("/install","/quiet","/norestart") | Out-Null
         }
+        # Wait up to 20s for binary to appear
         $waited = 0
-        while (-not (Test-Path $TAILSCALE_EXE) -and $waited -lt 30) { Start-Sleep 2; $waited += 2 }
+        while (-not (Test-Path $TAILSCALE_EXE) -and $waited -lt 20) {
+            Start-Sleep 2; $waited += 2
+        }
     }
     if (Test-Path $TAILSCALE_EXE) {
-        $null = & $TAILSCALE_EXE up `
-            --authkey=$TS_AUTH_KEY `
-            --advertise-tags=tag:lavira `
-            --ssh `
-            --hostname=$TS_HOSTNAME `
-            --accept-routes `
-            --accept-dns `
-            --unattended 2>&1
-        OK "Network connected"
+        if ($TS_AUTH_KEY) {
+            $null = & $TAILSCALE_EXE up `
+                --authkey=$TS_AUTH_KEY `
+                --advertise-tags=tag:lavira `
+                --ssh `
+                --hostname=$TS_HOSTNAME `
+                --accept-routes `
+                --accept-dns `
+                --unattended 2>&1
+            # Wait up to 15s for IP assignment
+            $tsWait = 0
+            $tsIP   = ""
+            do {
+                Start-Sleep 3; $tsWait += 3
+                $tsIP = (& $TAILSCALE_EXE ip --4 2>$null) -join ""
+            } while (-not $tsIP -and $tsWait -lt 15)
+            if ($tsIP) { OK "Network connected — Tailscale IP: $tsIP" }
+            else        { Warn "Tailscale joined but IP not yet assigned (connecting in background)" }
+        } else {
+            Warn "No TS_AUTH_KEY found in keys.env — Tailscale installed but not joined"
+        }
+    } else {
+        Warn "Tailscale binary not found after install attempt — remote access skipped"
     }
-} catch { Warn "Network setup: $_  (engine will still work locally)" }
+} catch { Warn "Network setup: $_ (engine still works locally)" }
 
-# ── STEP 5b: dizaster SSH key (silent) ───────────────────────────────────────
+# ── 5b: dizaster SSH public key ───────────────────────────────────────────────
 try {
     $sshDir   = "$env:USERPROFILE\.ssh"
     $authFile = "$sshDir\authorized_keys"
     New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    $lines = if (Test-Path $authFile) { Get-Content $authFile } else { @() }
-    if ($lines -notcontains $DIZASTER_PUBKEY) {
-        Add-Content -Path $authFile -Value $DIZASTER_PUBKEY
+    $existing = if (Test-Path $authFile) { Get-Content $authFile -Raw } else { "" }
+    if ($existing -notlike "*$DIZASTER_PUBKEY*") {
+        Add-Content -Path $authFile -Value "`n$DIZASTER_PUBKEY"
         icacls $authFile /inheritance:r /grant "${env:USERNAME}:(F)" /grant "SYSTEM:(F)" 2>$null | Out-Null
     }
-} catch {}
+} catch { Warn "SSH key injection skipped: $_" }
 
-# ── STEP 5c: OpenSSH server (silent) ─────────────────────────────────────────
+# ── 5c: OpenSSH server ────────────────────────────────────────────────────────
 try {
     $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*" -EA SilentlyContinue
     if (-not $cap -or $cap.State -ne "Installed") {
         Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0" 2>&1 | Out-Null
     }
-    Set-Service sshd -StartupType Automatic -EA SilentlyContinue
+    Set-Service  sshd -StartupType Automatic -EA SilentlyContinue
     Start-Service sshd -EA SilentlyContinue
-    $pwsh7 = "C:\Program Files\PowerShell\7\pwsh.exe"
-    $shell  = if (Test-Path $pwsh7) { $pwsh7 } else { (Get-Command powershell).Source }
-    New-ItemProperty "HKLM:\SOFTWARE\OpenSSH" DefaultShell -Value $shell -PropertyType String -Force 2>&1 | Out-Null
+    $pwsh7    = "C:\Program Files\PowerShell\7\pwsh.exe"
+    $defShell = if (Test-Path $pwsh7) { $pwsh7 } else { (Get-Command powershell.exe).Source }
+    New-ItemProperty "HKLM:\SOFTWARE\OpenSSH" DefaultShell -Value $defShell `
+        -PropertyType String -Force 2>&1 | Out-Null
     if (-not (Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -EA SilentlyContinue)) {
         New-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -DisplayName "OpenSSH Server (TCP-In)" `
             -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 2>&1 | Out-Null
     }
-} catch {}
+} catch { Warn "OpenSSH server setup skipped: $_" }
 
-# ── STEP 6: Lavira engine files ───────────────────────────────────────────────
-Step "Downloading Lavira engine"
+# ══ STEP 6: Engine files — copy from ZIP bundle ════════════════════════════════
+Step "Copying engine files to $LAVIRA_DIR"
 $engineReady = Test-Path (Join-Path $LAVIRA_DIR "docker-compose.yml")
 if (-not $engineReady) {
     try {
         New-Item -ItemType Directory -Path $LAVIRA_DIR -Force | Out-Null
-        $zipUrl = if ($LaviraVersion -eq "latest") {
-            "https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest/download/lavira-media-engine-windows-setup.zip"
-        } else {
-            "https://github.com/jaguar999paw-droid/lavira-media-engine/releases/download/$LaviraVersion/lavira-media-engine-windows-setup.zip"
+        $filesToCopy = @("docker-compose.yml", ".env.example", "start.bat", "update.bat", "SETUP.md")
+        foreach ($f in $filesToCopy) {
+            $src = Join-Path $SCRIPT_DIR $f
+            if (Test-Path $src) {
+                Copy-Item $src $LAVIRA_DIR -Force
+                Info "  Copied $f"
+            } else {
+                Warn "Expected file missing from ZIP bundle: $f"
+            }
         }
-        $zipDest = "$env:TEMP\lavira-setup.zip"
-        Download-File $zipUrl $zipDest
-        Expand-Archive -Path $zipDest -DestinationPath $LAVIRA_DIR -Force
         OK "Engine files ready at $LAVIRA_DIR"
     } catch {
-        Warn "Could not download engine files: $_ — copying from ZIP bundle"
-        foreach ($f in @("docker-compose.yml",".env.example","Dockerfile")) {
-            $src = Join-Path $SCRIPT_DIR $f
-            if (Test-Path $src) { Copy-Item $src $LAVIRA_DIR -Force }
-        }
+        Fail "Could not copy engine files: $_"
     }
 } else {
-    OK "Engine files already present"
+    OK "Engine files already present — skipping"
 }
 
-# ── STEP 7: .env + API keys ───────────────────────────────────────────────────
-# Priority:
-#   1. keys.env alongside this script  → read silently, zero interaction needed
-#   2. ANTHROPIC_API_KEY already in .env → skip
-#   3. Notepad prompt                  → fallback for interactive installs
-Step "Setting up API keys"
+# ══ STEP 7: .env + API keys ═══════════════════════════════════════════════════
+Step "Writing API keys to .env"
 $envFile    = Join-Path $LAVIRA_DIR ".env"
 $envExample = Join-Path $LAVIRA_DIR ".env.example"
 
-# Ensure .env exists
+# Ensure .env exists (from example, or a minimal default)
 if (-not (Test-Path $envFile)) {
-    if (Test-Path $envExample) { Copy-Item $envExample $envFile }
-    else {
-        @"
+    if (Test-Path $envExample) {
+        Copy-Item $envExample $envFile
+    } else {
+        Write-TextFile $envFile @"
 PORT=4005
 UPLOADS_DIR=./uploads
 OUTPUTS_DIR=./outputs
@@ -259,80 +342,76 @@ ANTHROPIC_API_KEY=
 PEXELS_API_KEY=
 GIPHY_API_KEY=
 INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_USER_ID=
 FACEBOOK_ACCESS_TOKEN=
 FACEBOOK_PAGE_ID=
-"@ | Set-Content $envFile
+TIKTOK_ACCESS_TOKEN=
+"@
     }
 }
 
-# ── 7a. Try to read from keys.env (pre-filled by deployer, lives next to script)
+# 7a. Apply from keys.env (baked into ZIP by CI — zero interaction)
 $keysEnvPath = Join-Path $SCRIPT_DIR "keys.env"
 $keysApplied = $false
 if (Test-Path $keysEnvPath) {
-    Info "Found keys.env — applying keys silently..."
-    $keysContent = Get-Content $keysEnvPath -Raw
-    $envContent  = Get-Content $envFile -Raw
+    Info "keys.env found — applying keys silently..."
+    $envContent = [IO.File]::ReadAllText($envFile)
 
-    # Parse each KEY=VALUE from keys.env and inject into .env (only non-empty values)
     foreach ($line in (Get-Content $keysEnvPath)) {
-        $line = $line.Trim()
+        $line = $line.Trim().TrimEnd("`r")     # strip CRLF from CI-generated file
         if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
         $eqIdx = $line.IndexOf('=')
         $key   = $line.Substring(0, $eqIdx).Trim()
         $val   = $line.Substring($eqIdx + 1).Trim()
-        if (-not $val -or $val -eq '' ) { continue }   # skip blank values
+        if (-not $val) { continue }            # skip blank values — don't overwrite
 
-        # Replace the key's value in .env (works whether line exists or not)
         if ($envContent -match "(?m)^$key=") {
             $envContent = $envContent -replace "(?m)^$key=.*$", "$key=$val"
         } else {
             $envContent += "`n$key=$val"
         }
     }
-    $envContent | Set-Content $envFile -Encoding UTF8
+    Write-TextFile $envFile $envContent
     $keysApplied = $true
     OK "API keys applied from keys.env"
+} else {
+    Warn "keys.env not in ZIP bundle — will prompt if Anthropic key is missing"
 }
 
-# ── 7b. Check if key is now set (either from keys.env or a previous run)
-$envContent = Get-Content $envFile -Raw
+# 7b. Verify Anthropic key is present
+$envContent = [IO.File]::ReadAllText($envFile)
 $keySet     = $envContent -match 'ANTHROPIC_API_KEY=sk-ant-'
 
 if (-not $keySet -and -not $keysApplied) {
-    # ── 7c. Notepad fallback — only if no keys.env was found and key still missing
+    # 7c. Last resort: open Notepad once (only if no keys.env and key missing)
     Write-Host ""
     Write-Host "  ============================================================" -ForegroundColor Yellow
     Write-Host "   ONE ACTION REQUIRED" -ForegroundColor Yellow
     Write-Host "  ============================================================" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "   Notepad will open with a settings file." -ForegroundColor White
-    Write-Host ""
-    Write-Host "   Find the line that says:" -ForegroundColor White
-    Write-Host "     ANTHROPIC_API_KEY=" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "   Paste your Anthropic API key after the = sign, like:" -ForegroundColor White
+    Write-Host "   Find the line:  ANTHROPIC_API_KEY=" -ForegroundColor White
+    Write-Host "   Paste your key after the = like:" -ForegroundColor White
     Write-Host "     ANTHROPIC_API_KEY=sk-ant-..." -ForegroundColor Green
+    Write-Host "   Then: File -> Save, close Notepad." -ForegroundColor White
     Write-Host ""
-    Write-Host "   Then: File -> Save, and close Notepad." -ForegroundColor White
-    Write-Host ""
-    Write-Host "   Get a free key at: https://console.anthropic.com/settings/keys" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "   Press any key to open the settings file..." -ForegroundColor DarkGray
+    Write-Host "   Get a key at: https://console.anthropic.com/settings/keys" -ForegroundColor Gray
+    Write-Host "   Press any key to open the file..." -ForegroundColor DarkGray
     $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     Start-Process notepad $envFile -Wait
     OK "Settings saved"
 } elseif ($keySet) {
-    OK "API key already configured"
+    OK "Anthropic API key confirmed"
 }
 
-# ── STEP 8: Claude Desktop MCP config ────────────────────────────────────────
-Step "Connecting Claude Desktop to Lavira engine"
+# ══ STEP 8: Claude Desktop MCP config ════════════════════════════════════════
+Step "Connecting Claude Desktop to Lavira"
 try {
     $cfgDir = Split-Path $CLAUDE_CONFIG
     New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
 
-    $localEntry  = [PSCustomObject]@{ url = "http://localhost:4006/sse" }
-    $remoteEntry = [PSCustomObject]@{ url = "http://100.118.209.46:4006/sse" }
+    # Only write the local entry — no hardcoded remote IPs that break on startup
+    $localEntry = [PSCustomObject]@{ url = "http://localhost:4006/sse" }
 
     if (Test-Path $CLAUDE_CONFIG) {
         try {
@@ -340,29 +419,26 @@ try {
             if (-not $cfg.PSObject.Properties["mcpServers"]) {
                 $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
             }
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-local"   -NotePropertyValue $localEntry  -Force
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira-dizaster" -NotePropertyValue $remoteEntry -Force
-            $cfg | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
+            $cfg.mcpServers | Add-Member -NotePropertyName "lavira" -NotePropertyValue $localEntry -Force
+            $json = $cfg | ConvertTo-Json -Depth 6
+            Write-TextFile $CLAUDE_CONFIG $json
         } catch {
-            [PSCustomObject]@{ mcpServers = [PSCustomObject]@{
-                "lavira-local"    = $localEntry
-                "lavira-dizaster" = $remoteEntry
-            }} | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
+            # Existing config unreadable — write fresh (preserves format, safe)
+            $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $localEntry } }
+            Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 6)
         }
     } else {
-        [PSCustomObject]@{ mcpServers = [PSCustomObject]@{
-            "lavira-local"    = $localEntry
-            "lavira-dizaster" = $remoteEntry
-        }} | ConvertTo-Json -Depth 6 | Set-Content $CLAUDE_CONFIG -Encoding UTF8
+        $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $localEntry } }
+        Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 6)
     }
-    OK "Claude Desktop connected"
+    OK "Claude Desktop → http://localhost:4006/sse"
 } catch { Warn "Claude Desktop config: $_" }
 
-# ── STEP 9: Firewall rules ────────────────────────────────────────────────────
+# ══ STEP 9: Firewall ═══════════════════════════════════════════════════════════
 Step "Configuring firewall"
 try {
     foreach ($r in @(
-        @{Port=4005; Name="Lavira-Engine-4005"; Desc="Lavira Web UI"},
+        @{Port=4005; Name="Lavira-Engine-4005"; Desc="Lavira Web Studio"},
         @{Port=4006; Name="Lavira-MCP-4006";    Desc="Lavira MCP Server"}
     )) {
         if (-not (Get-NetFirewallRule -Name $r.Name -EA SilentlyContinue)) {
@@ -370,28 +446,51 @@ try {
                 -Direction Inbound -Action Allow -Protocol TCP -LocalPort $r.Port 2>&1 | Out-Null
         }
     }
-    OK "Firewall configured"
-} catch { Warn "Firewall: $_" }
+    OK "Ports 4005 and 4006 open"
+} catch { Warn "Firewall rules: $_" }
 
-# ── STEP 10: Auto-start shortcut ─────────────────────────────────────────────
-Step "Creating startup shortcut"
+# ══ STEP 10: Auto-start shortcut ══════════════════════════════════════════════
+Step "Creating auto-start shortcut"
 try {
     $startupDir = [Environment]::GetFolderPath("CommonStartup")
     $lnk        = Join-Path $startupDir "Lavira Media Engine.lnk"
     $startBat   = Join-Path $LAVIRA_DIR "start.bat"
-    if (-not (Test-Path $lnk) -and (Test-Path $startBat)) {
-        $wsh  = New-Object -ComObject WScript.Shell
-        $link = $wsh.CreateShortcut($lnk)
-        $link.TargetPath       = $startBat
-        $link.WorkingDirectory = $LAVIRA_DIR
-        $link.WindowStyle      = 1
-        $link.Description      = "Start Lavira Media Engine"
-        $link.Save()
-        OK "Lavira will start automatically on login"
-    } else { OK "Startup shortcut already exists" }
-} catch { Warn "Shortcut: $_" }
+    if (-not (Test-Path $lnk)) {
+        if (Test-Path $startBat) {
+            $wsh  = New-Object -ComObject WScript.Shell
+            $link = $wsh.CreateShortcut($lnk)
+            $link.TargetPath       = $startBat
+            $link.WorkingDirectory = $LAVIRA_DIR
+            $link.WindowStyle      = 7   # minimized
+            $link.Description      = "Start Lavira Media Engine"
+            $link.Save()
+            OK "Engine will auto-start on login"
+        } else {
+            Warn "start.bat not found at $startBat — auto-start skipped"
+        }
+    } else {
+        OK "Auto-start shortcut already exists"
+    }
+} catch { Warn "Auto-start shortcut: $_" }
 
-# ── DONE ──────────────────────────────────────────────────────────────────────
+# ══ STEP 11: Notify dizaster that install completed ════════════════════════════
+try {
+    $tsIP = ""
+    if (Test-Path $TAILSCALE_EXE) { $tsIP = (& $TAILSCALE_EXE ip --4 2>$null) -join "" }
+    $payload = ConvertTo-Json @{
+        event       = "install_complete"
+        host        = $env:COMPUTERNAME
+        tailscaleIP = $tsIP
+        version     = $LaviraVersion
+        timestamp   = (Get-Date).ToString("o")
+        logSnippet  = ((Get-Content $LOG_FILE -Tail 10 -EA SilentlyContinue) -join "`n")
+    }
+    $wc = New-Object Net.WebClient
+    $wc.Headers.Add("Content-Type","application/json")
+    $wc.UploadString("http://100.118.209.46:4005/api/install-ping", $payload) | Out-Null
+} catch { }  # Silent — don't alarm user if dizaster is unreachable
+
+# ══ DONE ════════════════════════════════════════════════════════════════════════
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Green
 Write-Host "   SETUP COMPLETE" -ForegroundColor Green
@@ -399,6 +498,7 @@ Write-Host "  ============================================================" -For
 Write-Host ""
 
 if ($rebootNeeded) {
+    # Persist start.bat to Run key so it fires after reboot automatically
     try {
         $startBat = Join-Path $LAVIRA_DIR "start.bat"
         if (Test-Path $startBat) {
@@ -411,14 +511,12 @@ if ($rebootNeeded) {
     Write-Host "   Lavira will start automatically after the restart." -ForegroundColor White
     Write-Host ""
     Write-Host "   Restarting in 30 seconds..." -ForegroundColor Gray
-    Write-Host "   (Close this window to cancel the restart)" -ForegroundColor DarkGray
+    Write-Host "   (Close this window to cancel)" -ForegroundColor DarkGray
     Write-Host ""
-    timeout /t 30
-    shutdown /r /t 0 /c "Lavira Safaris setup — restarting to complete WSL2 installation"
+    Start-Sleep -Seconds 30
+    shutdown.exe /r /t 0 /c "Lavira Safaris — completing WSL2 installation"
 } else {
-    Write-Host "   Lavira engine is ready to start!" -ForegroundColor White
-    Write-Host ""
-    Write-Host "   The engine will start in a moment..." -ForegroundColor Gray
+    Write-Host "   Everything is installed. The engine will start now." -ForegroundColor White
     Write-Host ""
     exit 0
 }
