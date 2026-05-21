@@ -15,26 +15,30 @@ echo.
 echo  ================================================================
 echo.
 
-:: ── Self-elevate to Administrator (preserves %~f0 full path) ─────────────────
+:: ── Self-elevate to Administrator ─────────────────────────────────────────────
+:: Uses ShellExecute RunAs so UAC prompt always appears (works on standard accounts).
+:: Preserves %~f0 (full path to this bat) through the elevation jump.
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo  Requesting administrator permission...
-    powershell -WindowStyle Hidden -Command "Start-Process cmd -ArgumentList '/c \"%~f0\"' -Verb RunAs"
+    powershell -WindowStyle Hidden -Command ^
+      "Start-Process cmd -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs -Wait"
     exit /b
 )
 
 echo  [1/4] Preparing installer...
 echo.
 
-:: ── Locate setup-remote-access.ps1 (or download it if missing) ───────────────
-:: This handles the common case where the user runs the BAT directly from
-:: inside a ZIP/RAR archive — Windows only extracts the BAT to a temp folder,
-:: leaving the PS1 behind. We download it transparently from GitHub.
+:: ── Locate setup-remote-access.ps1 ────────────────────────────────────────────
+:: Handles the common case where the user runs the BAT directly from inside a
+:: ZIP/archive — Windows only extracts the BAT to a temp folder, leaving the PS1
+:: behind. We download it transparently from GitHub if it is missing.
 set "PS1=%~dp0setup-remote-access.ps1"
 
 if not exist "%PS1%" (
     echo  Script not found locally — downloading from GitHub...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$wc=[System.Net.WebClient]::new();[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;$wc.DownloadFile('https://raw.githubusercontent.com/jaguar999paw-droid/lavira-media-engine/main/windows/setup-remote-access.ps1','%PS1%')"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+      "$wc=[System.Net.WebClient]::new();[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;$wc.DownloadFile('https://raw.githubusercontent.com/jaguar999paw-droid/lavira-media-engine/main/windows/setup-remote-access.ps1','%PS1%')"
     echo.
 )
 
@@ -58,9 +62,10 @@ if not exist "%PS1%" (
     exit /b 1
 )
 
-:: ── Run the PowerShell setup script ──────────────────────────────────────────
+:: ── Run the PowerShell setup script ───────────────────────────────────────────
 :: -ScriptDir tells the PS1 where to look for keys.env (same folder as this BAT)
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal -File "%PS1%" -Silent -ScriptDir "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Normal ^
+  -File "%PS1%" -Silent -ScriptDir "%~dp0"
 
 if %errorlevel% neq 0 (
     color 0C
@@ -69,6 +74,8 @@ if %errorlevel% neq 0 (
     echo   Something went wrong during setup.
     echo   Please take a photo of this screen and send it to:
     echo   info@lavirasafaris.com
+    echo.
+    echo   Log file: %TEMP%\lavira-install.log
     echo  ================================================================
     echo.
     pause
@@ -80,8 +87,8 @@ echo.
 echo  [4/4] Starting Lavira engine...
 echo.
 
-set "START=%~dp0start.bat"
-if not exist "%START%" set "START=%USERPROFILE%\lavira-media-engine\start.bat"
+set "START=%USERPROFILE%\lavira-media-engine\start.bat"
+if not exist "%START%" set "START=%~dp0start.bat"
 if exist "%START%" call "%START%"
 
 endlocal
