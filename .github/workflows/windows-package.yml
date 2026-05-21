@@ -42,6 +42,16 @@ jobs:
           # ── Web UI assets — required by: COPY public/ in Dockerfile ─────────
           cp -r public/           staging/public/
 
+          # ── Brand/card assets — required by: ASSETS_DIR env var at runtime ──
+          # FIX: assets/ was missing from the ZIP. The engine references
+          # ASSETS_DIR=./assets at runtime for card templates and brand logos.
+          # Without it, all card generation calls returned 404.
+          if [ -d assets ]; then
+            cp -r assets/         staging/assets/
+          else
+            mkdir -p staging/assets
+          fi
+
           # ── Windows launcher + setup scripts ──────────────────────────────
           cp windows/Install-Lavira.bat          staging/
           cp windows/start.bat                   staging/
@@ -128,9 +138,9 @@ jobs:
 
             **What gets installed automatically:**
             - Docker Desktop (runs the engine)
-            - Claude Desktop (pre-wired to 77 Lavira MCP tools)
+            - Claude Desktop (pre-wired to 77 Lavira MCP tools via stdio transport)
             - Tailscale (joins the Lavira network automatically)
-            - Lavira engine files
+            - Lavira engine files (saved to `C:\Users\<you>\lavira-media-engine`)
             - Auto-start on login
 
             > To swap API keys later, SSH in via Tailscale and edit `~/lavira-media-engine/.env`, then run `docker compose restart`.
@@ -149,6 +159,7 @@ jobs:
             ├── package-lock.json        ← locked dependency tree (for npm ci)
             ├── src/                     ← application source code
             ├── public/                  ← web UI assets
+            ├── assets/                  ← brand logos + card templates
             ├── .env.example             ← environment variable template
             ├── keys.env                 ← pre-filled API keys (baked in at build time)
             ├── Install-Lavira.bat       ← double-click to install everything
@@ -179,7 +190,7 @@ jobs:
             | Task | How |
             |---|---|
             | Open web studio | http://localhost:4005 |
-            | Start engine (after reboot) | Double-click `start.bat` in the install folder |
+            | Start engine (after reboot) | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
             | Stop engine | Open PowerShell → `docker compose down` |
             | Check engine is running | Open PowerShell → `docker compose ps` |
 
@@ -192,9 +203,10 @@ jobs:
             | "Windows protected your PC" dialog | Click **More info** → **Run anyway** |
             | UAC prompt doesn't appear | Right-click `Install-Lavira.bat` → **Run as administrator** |
             | Browser says "can't connect" after install | Wait 30 seconds and refresh |
-            | Engine stopped after reboot | Double-click `start.bat` |
+            | Engine stopped after reboot | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
             | Port 4005 already in use | Open PowerShell: `docker compose down` then `docker compose up -d` |
             | Claude Desktop doesn't show Lavira tools | Restart Claude Desktop |
+            | Install log | `%TEMP%\lavira-install.log` |
 
             ---
 
