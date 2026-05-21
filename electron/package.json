@@ -1,6 +1,6 @@
 {
   "name": "lavira-media",
-  "version": "1.3.0",
+  "version": "1.6.0",
   "description": "Lavira Safaris — Automated Social Media Content Engine",
   "main": "main.js",
   "private": true,
@@ -82,19 +82,19 @@
         { "target": "nsis", "arch": ["x64"] }
       ],
       "icon": "icons/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "requireAdministrator"
     },
 
     "nsis": {
-      "oneClick":                        false,
+      "oneClick":                          false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut":           true,
-      "createStartMenuShortcut":         true,
-      "shortcutName":                    "Lavira Media",
-      "installerIcon":                   "icons/icon.ico",
-      "uninstallerIcon":                 "icons/icon.ico",
-      "license":                         "../LICENSE",
-      "allowElevation":                  false
+      "createDesktopShortcut":             true,
+      "createStartMenuShortcut":           true,
+      "shortcutName":                      "Lavira Media",
+      "installerIcon":                     "icons/icon.ico",
+      "uninstallerIcon":                   "icons/icon.ico",
+      "license":                           "../LICENSE",
+      "allowElevation":                    true
     },
 
     "mac": {
