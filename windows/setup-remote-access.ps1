@@ -16,7 +16,7 @@
       5.  Inject dizaster SSH public key + enable OpenSSH server
       6.  Copy engine files from ZIP bundle to ~/lavira-media-engine
       7.  Write .env with pre-filled API keys from keys.env (no prompts)
-      8.  Write Claude Desktop MCP config (local only)
+      8.  Write Claude Desktop MCP config (stdio transport, Claude Desktop 0.7+)
       9.  Open firewall for ports 4005 and 4006
       10. Create auto-start shortcut
       11. Ping dizaster to confirm install completed (non-fatal)
@@ -56,7 +56,6 @@ $SCRIPT_DIR = if ($ScriptDir -and (Test-Path $ScriptDir)) {
 
 # ── Baked-in constants (all paths resolved, no hardcoded keys) ────────────────
 # TS_AUTH_KEY: read from keys.env (injected by CI into ZIP — never hardcoded here).
-# $SCRIPT_DIR is now set, so this lookup works correctly.
 $TS_AUTH_KEY = if ($env:TS_AUTH_KEY) {
     $env:TS_AUTH_KEY
 } else {
@@ -71,10 +70,20 @@ $TS_HOSTNAME     = "lavira-win-" + ($env:COMPUTERNAME.ToLower() -replace '[^a-z0
 $DIZASTER_PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICRGd2AcKdoVwzfwBx/HwVRgqY6KtuNxzzFyQk7xU8Qx kamau@dizaster"
 $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"
 $CLAUDE_CONFIG   = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
-$TAILSCALE_EXE   = "C:\Program Files\Tailscale\tailscale.exe"
 $REBOOT_FLAG     = Join-Path $env:TEMP "lavira_needs_reboot.flag"
 $LOG_FILE        = Join-Path $env:TEMP "lavira-install.log"
 $rebootNeeded    = $false
+
+# Docker Desktop can install to either of these locations depending on
+# Windows version and whether the user is an admin or standard account.
+$DOCKER_PATHS = @(
+    "C:\Program Files\Docker\Docker\Docker Desktop.exe",
+    "$env:LOCALAPPDATA\Programs\Docker\Docker\Docker Desktop.exe"
+)
+$TAILSCALE_PATHS = @(
+    "C:\Program Files\Tailscale\tailscale.exe",
+    "C:\Program Files (x86)\Tailscale\tailscale.exe"
+)
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 $step = 0
@@ -90,10 +99,12 @@ function Warn { param($m) Write-Host "       !!  $m" -ForegroundColor Yellow; Ad
 function Info { param($m) if (-not $Silent) { Write-Host "           $m" -ForegroundColor Gray   } }
 function Fail { param($m) Write-Host "  [FAIL] $m" -ForegroundColor Red; Add-Content $LOG_FILE "  FAIL: $m"; throw $m }
 
+# FIX: Use Invoke-WebRequest (follows redirects) instead of WebClient which
+# does not follow 301/302 by default — critical for Tailscale's CDN URLs.
 function Download-File {
     param([string]$Url, [string]$Dest)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    (New-Object Net.WebClient).DownloadFile($Url, $Dest)
+    Invoke-WebRequest -Uri $Url -OutFile $Dest -UseBasicParsing -ErrorAction Stop
 }
 
 function Run-Quiet {
@@ -108,6 +119,11 @@ function Run-Quiet {
 function Write-TextFile {
     param([string]$Path, [string]$Content)
     [IO.File]::WriteAllText($Path, $Content, (New-Object Text.UTF8Encoding $false))
+}
+
+function Find-FirstPath {
+    param([string[]]$Candidates)
+    return $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 
 "" | Set-Content $LOG_FILE   # reset log each run
@@ -134,7 +150,8 @@ if (-not $winget) {
     Warn "winget not found — downloading App Installer..."
     try {
         $dest = "$env:TEMP\AppInstaller.msixbundle"
-        Download-File "https://aka.ms/getwinget" $dest
+        # Direct download from GitHub (no Microsoft Store login required)
+        Download-File "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" $dest
         Add-AppxPackage -Path $dest -ErrorAction Stop
         $env:PATH += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
         $winget = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
@@ -150,11 +167,12 @@ function Install-App {
     param(
         [string]$ID,
         [string]$Name,
-        [string]$CheckPath   = "",
-        [string]$FallbackUrl = ""
+        [string[]]$CheckPaths  = @(),
+        [string]$FallbackUrl   = ""
     )
-    if ($CheckPath -and (Test-Path $CheckPath)) {
-        OK "$Name already installed"
+    $found = Find-FirstPath $CheckPaths
+    if ($found) {
+        OK "$Name already installed at $found"
         return $true
     }
     Info "Installing $Name..."
@@ -177,7 +195,8 @@ function Install-App {
         } catch { Warn "Direct download fallback failed for $Name" }
     }
     Start-Sleep -Seconds 5
-    if ($CheckPath -and -not (Test-Path $CheckPath)) {
+    $verified = Find-FirstPath $CheckPaths
+    if (-not $verified) {
         Warn "$Name could not be verified at expected path — continuing"
     } else {
         OK "$Name installed"
@@ -188,8 +207,8 @@ function Install-App {
 # ══ STEP 2: Docker Desktop ════════════════════════════════════════════════════
 Step "Installing Docker Desktop"
 Install-App "Docker.DockerDesktop" "Docker Desktop" `
-    "C:\Program Files\Docker\Docker\Docker Desktop.exe" `
-    "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe" | Out-Null
+    -CheckPaths $DOCKER_PATHS `
+    -FallbackUrl "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe" | Out-Null
 
 # ══ STEP 3: WSL2 ══════════════════════════════════════════════════════════════
 Step "Enabling Windows Subsystem for Linux (WSL2)"
@@ -214,34 +233,38 @@ $claudePaths = @(
     "$env:LOCALAPPDATA\Programs\claude\claude.exe",
     "C:\Program Files\Claude\claude.exe"
 )
-$claudeFound = $claudePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+$claudeFound = Find-FirstPath $claudePaths
 if ($claudeFound) {
-    OK "Claude Desktop already installed"
+    OK "Claude Desktop already installed at $claudeFound"
 } else {
-    Install-App "Anthropic.Claude" "Claude Desktop" | Out-Null
+    Install-App "Anthropic.Claude" "Claude Desktop" -CheckPaths $claudePaths | Out-Null
 }
 
 # ══ STEP 5: Tailscale ═════════════════════════════════════════════════════════
 Step "Connecting to Lavira network (Tailscale)"
 try {
-    if (-not (Test-Path $TAILSCALE_EXE)) {
+    $TAILSCALE_EXE = Find-FirstPath $TAILSCALE_PATHS
+    if (-not $TAILSCALE_EXE) {
         Info "Downloading Tailscale..."
         if ($winget) {
             Run-Quiet $winget @("install","--id","Tailscale.Tailscale","--silent",
                                 "--accept-package-agreements","--accept-source-agreements",
                                 "--scope","machine") | Out-Null
         } else {
+            # FIX: Use versioned stable URL — the "latest" redirect URL is a 301 that
+            # older PowerShell WebClient does not follow. Invoke-WebRequest handles it.
             $tsDest = "$env:TEMP\tailscale-setup.exe"
             Download-File "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe" $tsDest
             Run-Quiet $tsDest @("/install","/quiet","/norestart") | Out-Null
         }
-        # Wait up to 20s for binary to appear
+        # Wait up to 30s for binary to appear (installer is async)
         $waited = 0
-        while (-not (Test-Path $TAILSCALE_EXE) -and $waited -lt 20) {
+        while (-not (Find-FirstPath $TAILSCALE_PATHS) -and $waited -lt 30) {
             Start-Sleep 2; $waited += 2
         }
+        $TAILSCALE_EXE = Find-FirstPath $TAILSCALE_PATHS
     }
-    if (Test-Path $TAILSCALE_EXE) {
+    if ($TAILSCALE_EXE) {
         if ($TS_AUTH_KEY) {
             $null = & $TAILSCALE_EXE up `
                 --authkey=$TS_AUTH_KEY `
@@ -304,7 +327,17 @@ $engineReady = Test-Path (Join-Path $LAVIRA_DIR "docker-compose.yml")
 if (-not $engineReady) {
     try {
         New-Item -ItemType Directory -Path $LAVIRA_DIR -Force | Out-Null
-        $filesToCopy = @("docker-compose.yml", ".env.example", "start.bat", "update.bat", "SETUP.md")
+
+        # Files at ZIP root (flat copy)
+        $filesToCopy = @(
+            "docker-compose.yml",
+            "Dockerfile",
+            ".env.example",
+            "package.json",
+            "package-lock.json",
+            "start.bat",
+            "SETUP.md"
+        )
         foreach ($f in $filesToCopy) {
             $src = Join-Path $SCRIPT_DIR $f
             if (Test-Path $src) {
@@ -314,6 +347,21 @@ if (-not $engineReady) {
                 Warn "Expected file missing from ZIP bundle: $f"
             }
         }
+
+        # Directories required by Dockerfile COPY instructions
+        foreach ($dir in @("src", "public", "assets")) {
+            $src = Join-Path $SCRIPT_DIR $dir
+            if (Test-Path $src) {
+                Copy-Item $src (Join-Path $LAVIRA_DIR $dir) -Recurse -Force
+                Info "  Copied $dir/"
+            } else {
+                # src/ and public/ are required; assets/ is optional
+                if ($dir -ne "assets") {
+                    Warn "Required directory missing from ZIP bundle: $dir/ — Docker build will fail"
+                }
+            }
+        }
+
         OK "Engine files ready at $LAVIRA_DIR"
     } catch {
         Fail "Could not copy engine files: $_"
@@ -405,13 +453,44 @@ if (-not $keySet -and -not $keysApplied) {
 }
 
 # ══ STEP 8: Claude Desktop MCP config ════════════════════════════════════════
-Step "Connecting Claude Desktop to Lavira"
+# FIX: Claude Desktop 0.7+ on Windows requires stdio transport for local MCP
+# servers. The previous SSE entry (http://localhost:4006/sse) appeared to work
+# but tools never loaded because Claude Desktop no longer polls SSE endpoints
+# automatically — it only discovers them if explicitly using SSE mode AND the
+# server is already running when Claude starts. The stdio transport is reliable,
+# starts the server on demand, and works even after reboots.
+Step "Connecting Claude Desktop to Lavira (stdio MCP)"
 try {
     $cfgDir = Split-Path $CLAUDE_CONFIG
     New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
 
-    # Only write the local entry — no hardcoded remote IPs that break on startup
-    $localEntry = [PSCustomObject]@{ url = "http://localhost:4006/sse" }
+    # node must be in PATH — it is installed by Docker Desktop's WSL2 layer, but
+    # for the stdio command we need the Windows-native node.exe. Check for it.
+    $nodePath = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+    if (-not $nodePath) {
+        # Docker Desktop bundles node; also check common standalone install paths
+        $nodeCandidates = @(
+            "$env:ProgramFiles\nodejs\node.exe",
+            "$env:LOCALAPPDATA\Programs\nodejs\node.exe"
+        )
+        $nodePath = Find-FirstPath $nodeCandidates
+    }
+
+    $laviraEntry = if ($nodePath -and (Test-Path (Join-Path $LAVIRA_DIR "src\mcp\server.js"))) {
+        # Preferred: stdio transport — starts server on demand, no port required
+        [PSCustomObject]@{
+            command = $nodePath
+            args    = @((Join-Path $LAVIRA_DIR "src\mcp\server.js"))
+            env     = [PSCustomObject]@{
+                LAVIRA_DIR = $LAVIRA_DIR
+                NODE_ENV   = "production"
+            }
+        }
+    } else {
+        # Fallback: SSE (requires engine already running)
+        Warn "Node.exe not found — falling back to SSE MCP transport"
+        [PSCustomObject]@{ url = "http://localhost:4006/sse" }
+    }
 
     if (Test-Path $CLAUDE_CONFIG) {
         try {
@@ -419,19 +498,19 @@ try {
             if (-not $cfg.PSObject.Properties["mcpServers"]) {
                 $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
             }
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira" -NotePropertyValue $localEntry -Force
-            $json = $cfg | ConvertTo-Json -Depth 6
+            $cfg.mcpServers | Add-Member -NotePropertyName "lavira" -NotePropertyValue $laviraEntry -Force
+            $json = $cfg | ConvertTo-Json -Depth 10
             Write-TextFile $CLAUDE_CONFIG $json
         } catch {
-            # Existing config unreadable — write fresh (preserves format, safe)
-            $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $localEntry } }
-            Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 6)
+            # Existing config unreadable — write fresh
+            $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $laviraEntry } }
+            Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 10)
         }
     } else {
-        $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $localEntry } }
-        Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 6)
+        $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $laviraEntry } }
+        Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 10)
     }
-    OK "Claude Desktop → http://localhost:4006/sse"
+    OK "Claude Desktop MCP config written (stdio transport)"
 } catch { Warn "Claude Desktop config: $_" }
 
 # ══ STEP 9: Firewall ═══════════════════════════════════════════════════════════
@@ -476,7 +555,8 @@ try {
 # ══ STEP 11: Notify dizaster that install completed ════════════════════════════
 try {
     $tsIP = ""
-    if (Test-Path $TAILSCALE_EXE) { $tsIP = (& $TAILSCALE_EXE ip --4 2>$null) -join "" }
+    $tsExe = Find-FirstPath $TAILSCALE_PATHS
+    if ($tsExe) { $tsIP = (& $tsExe ip --4 2>$null) -join "" }
     $payload = ConvertTo-Json @{
         event       = "install_complete"
         host        = $env:COMPUTERNAME
