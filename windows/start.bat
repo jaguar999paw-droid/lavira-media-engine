@@ -10,6 +10,24 @@ echo   AI-powered safari content engine by Lavira Safaris
 echo  ============================================================
 echo.
 
+:: ── Locate project directory ──────────────────────────────────────────────────
+:: Priority 1: %USERPROFILE%\lavira-media-engine (set by installer)
+:: Priority 2: parent of this script's folder  (dev / manual run)
+:: Priority 3: current working directory
+set "LAVIRA_DIR=%USERPROFILE%\lavira-media-engine"
+if not exist "%LAVIRA_DIR%\docker-compose.yml" (
+    :: Try parent of the folder this bat lives in
+    set "LAVIRA_DIR=%~dp0.."
+    :: Normalise the path (removes trailing backslash + "..")
+    for %%A in ("%~dp0..") do set "LAVIRA_DIR=%%~fA"
+)
+if not exist "%LAVIRA_DIR%\docker-compose.yml" (
+    set "LAVIRA_DIR=%CD%"
+)
+
+echo  [INFO] Project directory: %LAVIRA_DIR%
+echo.
+
 :: ── Check Docker Desktop ─────────────────────────────────────────────────────
 where docker >nul 2>&1
 if %errorlevel% neq 0 (
@@ -34,8 +52,8 @@ if %errorlevel% neq 0 (
     echo.
     start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" 2>nul
     start "" "%LOCALAPPDATA%\Programs\Docker\Docker\Docker Desktop.exe" 2>nul
-    echo  Waiting 30 seconds for Docker to start...
-    timeout /t 30 /nobreak >nul
+    echo  Waiting 45 seconds for Docker to start...
+    timeout /t 45 /nobreak >nul
     docker info >nul 2>&1
     if !errorlevel! neq 0 (
         color 0C
@@ -52,9 +70,8 @@ if %errorlevel% neq 0 (
 echo  [OK] Docker Desktop is running.
 echo.
 
-:: ── Move to the project directory (parent of this script) ────────────────────
-:: Move to the folder where this script lives (== project root in Windows deployment)
-cd /d "%~dp0"
+:: ── Move to the project root (where docker-compose.yml lives) ─────────────────
+cd /d "%LAVIRA_DIR%"
 
 :: ── Create persistent DB volume if it doesn't exist ──────────────────────────
 docker volume inspect lavira-db >nul 2>&1
@@ -91,7 +108,6 @@ if not exist ".env" (
     pause >nul
 )
 
-:: ── Pull latest images ────────────────────────────────────────────────────────
 :: ── Stop any old containers cleanly ──────────────────────────────────────────
 echo  [RESTARTING] Stopping previous containers...
 docker compose down --remove-orphans >nul 2>&1
@@ -117,16 +133,14 @@ if %errorlevel% neq 0 (
 :: ── Wait for health check ─────────────────────────────────────────────────────
 echo.
 echo  [WAITING] Engine starting up...
-set /a tries=0
+set tries=0
 :HEALTHLOOP
 set /a tries+=1
-if %tries% gtr 30 goto TIMEOUT
+if %tries% gtr 40 goto TIMEOUT
 curl -sf http://localhost:4005/api/health >nul 2>&1
 if %errorlevel% equ 0 goto HEALTHY
-timeout /t 2 /nobreak >nul
-set /a dots=tries %% 3
-if !dots! equ 0 (set "BAR=...") else if !dots! equ 1 (set "BAR=..") else (set "BAR=.")
-echo   Waiting!BAR!
+timeout /t 3 /nobreak >nul
+echo   Waiting... (%tries%/40)
 goto HEALTHLOOP
 
 :TIMEOUT
