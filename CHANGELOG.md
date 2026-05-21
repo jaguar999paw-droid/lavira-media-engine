@@ -2,6 +2,94 @@
 
 All notable changes to Lavira Media Engine are documented here.
 
+---
+
+## [1.6.0] — 2026-05-21
+
+### Fixed — Windows setup bugs (all platforms ship this release)
+
+This release is a **Windows-setup correctness fix**. No server-side code
+changed. Users running a previous installer should re-download and re-run
+`Install-Lavira.bat` from this release.
+
+#### 🔴 Critical
+
+- **`windows/start.bat` — wrong working directory (CWD bug)**
+  `cd /d "%~dp0"` set the working directory to the `windows/` subfolder
+  inside the ZIP. `docker-compose.yml`, `Dockerfile`, `src/`, and `public/`
+  all live at the project root one level up. Every `docker compose up --build`
+  call immediately failed with _"COPY failed: no source files"_ because Docker's
+  build context pointed at an empty directory. Fixed: CWD is now resolved from
+  `%USERPROFILE%\lavira-media-engine` (set by the installer) or the parent of
+  the script's own directory, whichever exists.
+
+- **`windows/Install-Lavira.bat` — malformed self-elevation on paths with spaces**
+  The `Start-Process cmd -ArgumentList '/c "%~f0"'` call was split by `cmd.exe`
+  at the first space inside the quoted path. On any machine where the bat lived
+  in a directory with a space (e.g. `C:\Users\Jane Doe\Downloads\`) the elevated
+  process silently exited without running anything. Fixed by doubling the inner
+  quotes: `'/c \"\"%~f0\"\"'`.
+
+- **`electron/package.json` — NSIS installer ran without administrator rights**
+  `"allowElevation": false` + `"requestedExecutionLevel": "asInvoker"` meant
+  the Electron installer exe asked for no elevation. Docker Desktop, WSL2, the
+  OpenSSH server, and Windows Firewall rules all require admin rights — they
+  silently failed or aborted, leaving the machine half-installed.
+  Fixed: `"allowElevation": true` + `"requestedExecutionLevel": "requireAdministrator"`.
+
+#### 🟠 High
+
+- **`windows/setup-remote-access.ps1` — `Download-File` did not follow HTTP redirects**
+  `System.Net.WebClient.DownloadFile` does not follow 301/302 redirects.
+  The Tailscale CDN URL (`pkgs.tailscale.com/stable/tailscale-setup-latest.exe`)
+  is a redirect — WebClient silently downloaded the redirect HTML instead of the
+  exe, then tried to execute it → _"not a valid Win32 application"_. The `aka.ms/getwinget`
+  winget fallback URL is also a redirect. Fixed: `Download-File` now uses
+  `Invoke-WebRequest -UseBasicParsing` which follows redirects natively.
+
+- **`windows/setup-remote-access.ps1` — MCP config written as SSE transport**
+  Claude Desktop 0.7+ on Windows no longer auto-discovers SSE endpoints that
+  aren't already running when Claude starts. Tools appeared in Settings → Developer
+  but never loaded in chat. Fixed: the installer now writes a **stdio transport**
+  MCP config entry (`command` + `args` + `env`) which Claude Desktop starts
+  on demand. Falls back to SSE only if `node.exe` cannot be found.
+
+#### 🟡 Medium
+
+- **`windows/setup-remote-access.ps1` — Docker / Tailscale paths hardcoded to single location**
+  Docker Desktop installs to `%LOCALAPPDATA%\Programs\Docker` on standard-user
+  accounts (not `C:\Program Files\Docker`). Tailscale can land in Program Files
+  or Program Files (x86). Single-path checks always missed the alternate location,
+  producing spurious "could not be verified" warnings and triggering re-installs.
+  Fixed: both tools now check multiple candidate paths via `Find-FirstPath` helper.
+
+- **`windows/setup-remote-access.ps1` — Step 6 listed `update.bat` (does not exist)**
+  `filesToCopy` included `"update.bat"` which was never added to the ZIP. Produced
+  a `Warn` on every install and left users with no update path. Removed. Also fixed:
+  Step 6 now copies `src/`, `public/`, and `assets/` directories to `LAVIRA_DIR` —
+  they were in the ZIP but never copied to the install target, so the first
+  `docker compose up --build` on a clean machine always failed.
+
+- **`.github/workflows/windows-package.yml` — `assets/` missing from ZIP**
+  The engine uses `ASSETS_DIR=./assets` for brand logos and card templates.
+  The CI staging step did not copy `assets/` from the repo. All card generation
+  calls at runtime returned 404 / `ENOENT assets/brand/logo_300.png`. Fixed:
+  `assets/` is now included (with a graceful `mkdir -p` guard if empty).
+
+- **`windows/setup-remote-access.ps1` — `ConvertTo-Json -Depth 6` truncated MCP config**
+  The stdio MCP entry has a nested `env` sub-object. Depth 6 serialised it as
+  `"env": "System.Collections.Hashtable"` (PowerShell's default string coercion).
+  Fixed: `-Depth 10`.
+
+### Changed
+
+- **Version sync** — `package.json`, `electron/package.json`, and CHANGELOG are
+  now all at `1.6.0`. The previous release shipped `package.json` at `1.5.2`,
+  `electron/package.json` at `1.3.0`, and CHANGELOG topping at `1.5.1`, causing
+  mismatched version strings in CI artifact names and the installer banner.
+
+---
+
 ## [1.5.1] — 2026-04-30
 
 ### Added
@@ -47,9 +135,6 @@ All notable changes to Lavira Media Engine are documented here.
 
 ---
 
-
----
-
 ## [1.2.1] — 2026-04-24
 
 ### Fixed
@@ -68,7 +153,6 @@ All notable changes to Lavira Media Engine are documented here.
 
 ---
 
-
 ## [1.2.0] — 2026-04-24
 
 ### Added
@@ -78,16 +162,15 @@ All notable changes to Lavira Media Engine are documented here.
 
 ---
 
-
 ## [1.1.1] — 2026-04-19
 
 ### Fixed
-- **CI: remove ** — on a fresh runner with an empty npm cache this flag
-  makes npm refuse all downloads and hard-fail. Replaced with  which
+- **CI: remove `--prefer-offline`** — on a fresh runner with an empty npm cache this flag
+  makes npm refuse all downloads and hard-fail. Replaced with `--no-audit --no-fund` which
   downloads normally but skips security-audit and funding nags (saves ~15 s per job).
 - **CI: Node.js 20 → 22** — GitHub Actions is deprecating Node 20 runners. Bumped all three
   build jobs to Node 22 to silence warnings and ensure long-term compatibility.
-- **CI: added ** to all build steps — surfaces the actual error line
+- **CI: added `set -e`** to all build steps — surfaces the actual error line
   in logs instead of just "exit code 1".
 
 ## [1.1.0] — 2026-04-19
