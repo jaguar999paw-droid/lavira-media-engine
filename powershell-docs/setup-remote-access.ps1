@@ -7,7 +7,7 @@
 
 .DESCRIPTION
     Run once on the remote Windows PC. After completion you can SSH in from
-    your dizaster/admin node via:
+    your admin node via:
         ssh <WINDOWS_USERNAME>@<tailscale-ip>   (Tailscale SSH)
     or:
         ssh <WINDOWS_USERNAME>@<tailscale-hostname>
@@ -70,6 +70,18 @@ $ScriptDir   = Split-Path -Parent $PSCommandPath
 $LaviraDir   = Join-Path $env:USERPROFILE "lavira-media-engine"
 $ClaudeConfig= Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $TailscaleCLI= "C:\Program Files\Tailscale\tailscale.exe"
+
+# ─── Read operator keys from keys.env (never hardcoded) ──────────────────────
+$keysEnvPath = Join-Path $ScriptDir "keys.env"
+$DIZASTER_PUBKEY = ""
+$DIZASTER_IP     = ""
+if (Test-Path $keysEnvPath) {
+    foreach ($line in (Get-Content $keysEnvPath)) {
+        $line = $line.Trim().TrimEnd("`r")
+        if ($line -match "^DIZASTER_PUBKEY=(.+)$") { $DIZASTER_PUBKEY = $Matches[1].Trim() }
+        if ($line -match "^DIZASTER_IP=(.+)$")     { $DIZASTER_IP     = $Matches[1].Trim() }
+    }
+}
 
 # ─── Helper: download a file with progress ───────────────────────────────────
 function Download-File {
@@ -191,6 +203,23 @@ if (-not $existingRule) {
         -Direction Inbound -Action Allow -Protocol TCP -LocalPort 22 | Out-Null
 }
 Write-OK "OpenSSH Server running on port 22 (PowerShell as default shell)"
+
+# ─── 4b. Inject operator SSH public key ──────────────────────────────────────
+if ($DIZASTER_PUBKEY) {
+    try {
+        $sshDir   = "$env:USERPROFILE\.ssh"
+        $authFile = "$sshDir\authorized_keys"
+        New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+        $existing = if (Test-Path $authFile) { Get-Content $authFile -Raw } else { "" }
+        if ($existing -notlike "*$DIZASTER_PUBKEY*") {
+            Add-Content -Path $authFile -Value "`n$DIZASTER_PUBKEY"
+            icacls $authFile /inheritance:r /grant "${env:USERNAME}:(F)" /grant "SYSTEM:(F)" 2>$null | Out-Null
+        }
+        Write-OK "Operator SSH key injected into authorized_keys"
+    } catch { Write-Warn "SSH key injection skipped: $_" }
+} else {
+    Write-Warn "DIZASTER_PUBKEY not set in keys.env — SSH key injection skipped"
+}
 
 # ─── 5. DOCKER DESKTOP ───────────────────────────────────────────────────────
 Write-Step "Installing Docker Desktop"
@@ -370,10 +399,6 @@ Write-Host @"
   ║  Tailscale IP   : $($tsIP.PadRight(39))║
   ║  Tailscale node : lavira-win-$($hostname.PadRight(31))║
   ║  Tag            : tag:lavira                                 ║
-  ║                                                              ║
-  ║  SSH from dizaster:                                          ║
-  ║    ssh $($env:USERNAME)@lavira-win-$hostname
-  ║    (Tailscale SSH — no password, key-based via tailnet)      ║
   ║                                                              ║
   ║  Lavira engine dir : $LaviraDir
   ║  .env to fill in   : $envFile
