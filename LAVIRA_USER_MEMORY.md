@@ -1,12 +1,11 @@
-# Lavira Media Engine — User Memory & Productivity Profile
+# Lavira Media Engine — Operator Memory & Productivity Profile
 <!-- AUTO-UPDATED by engine. Edit preferences below — engine reads this on every session. -->
 <!-- Last session: 2026-04-28 -->
 
 ## 🧠 WHO IS USING THIS ENGINE
-- **Owner:** Jake (Kamau) — builds & operates the Lavira Media Engine
+- **Owner:** Operator — builds & operates the Lavira Media Engine
 - **Role:** Solo operator managing all social content for Lavira Safaris (Kenya)
-- **Setup:** Ubuntu machine "dizaster" · Claude Desktop + tmux · Tailscale Funnel
-- **Engine path:** `/home/kamau/lavira-media-engine`
+- **Setup:** Claude Desktop + tmux · Tailscale
 
 ---
 
@@ -67,16 +66,6 @@
 
 ---
 
-## 🔧 KNOWN ISSUES (tracked here so they don't need re-explaining)
-
-- `outputs[]` in `list_recent_jobs` is empty — bug in memory.js (join against disk not done yet)
-- Anthropic key: present and working as of last session
-- Pexels key: active
-- GIPHY key: active
-- Instagram/TikTok: not configured — files saved to /outputs for manual upload
-
----
-
 ## 🗺️ CONTENT CALENDAR MEMORY
 
 | Destination | Last featured | Next due |
@@ -122,4 +111,3 @@
 - Source: Pexels #32445261 — Tomasz Dworczyk
 - Hook: "Africa's River Giants Await 🦛"
 - Package promo: 2 Days Masai Mara Safari
-
