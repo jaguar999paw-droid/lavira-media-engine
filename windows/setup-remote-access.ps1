@@ -13,13 +13,13 @@
       2.  Install Docker Desktop + enable WSL2
       3.  Install Claude Desktop
       4.  Install Tailscale + join Lavira network
-      5.  Inject dizaster SSH public key + enable OpenSSH server
+      5.  Inject operator SSH public key + enable OpenSSH server
       6.  Copy engine files from ZIP bundle to ~/lavira-media-engine
       7.  Write .env with pre-filled API keys from keys.env (no prompts)
       8.  Write Claude Desktop MCP config (stdio transport, Claude Desktop 0.7+)
       9.  Open firewall for ports 4005 and 4006
       10. Create auto-start shortcut
-      11. Ping dizaster to confirm install completed (non-fatal)
+      11. Ping lavira host to confirm install completed (non-fatal)
       12. Reboot if WSL2 needed, otherwise exit
 
 .PARAMETER Silent
@@ -66,8 +66,29 @@ $TS_AUTH_KEY = if ($env:TS_AUTH_KEY) {
     } else { "" }
 }
 
+# DIZASTER_PUBKEY: read from keys.env — never hardcoded here.
+$DIZASTER_PUBKEY = if ($env:DIZASTER_PUBKEY) {
+    $env:DIZASTER_PUBKEY
+} else {
+    $kf = Join-Path $SCRIPT_DIR "keys.env"
+    if (Test-Path $kf) {
+        $kv = Get-Content $kf | Where-Object { $_ -match "^DIZASTER_PUBKEY=" }
+        if ($kv) { ($kv -split "=",2)[1].Trim() } else { "" }
+    } else { "" }
+}
+
+# DIZASTER_IP: read from keys.env — never hardcoded here.
+$DIZASTER_IP = if ($env:DIZASTER_IP) {
+    $env:DIZASTER_IP
+} else {
+    $kf = Join-Path $SCRIPT_DIR "keys.env"
+    if (Test-Path $kf) {
+        $kv = Get-Content $kf | Where-Object { $_ -match "^DIZASTER_IP=" }
+        if ($kv) { ($kv -split "=",2)[1].Trim() } else { "" }
+    } else { "" }
+}
+
 $TS_HOSTNAME     = "lavira-win-" + ($env:COMPUTERNAME.ToLower() -replace '[^a-z0-9-]','-')
-$DIZASTER_PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICRGd2AcKdoVwzfwBx/HwVRgqY6KtuNxzzFyQk7xU8Qx kamau@dizaster"
 $LAVIRA_DIR      = Join-Path $env:USERPROFILE "lavira-media-engine"
 $CLAUDE_CONFIG   = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 $REBOOT_FLAG     = Join-Path $env:TEMP "lavira_needs_reboot.flag"
@@ -291,15 +312,19 @@ try {
     }
 } catch { Warn "Network setup: $_ (engine still works locally)" }
 
-# ── 5b: dizaster SSH public key ───────────────────────────────────────────────
+# ── 5b: operator SSH public key ───────────────────────────────────────────────
 try {
-    $sshDir   = "$env:USERPROFILE\.ssh"
-    $authFile = "$sshDir\authorized_keys"
-    New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-    $existing = if (Test-Path $authFile) { Get-Content $authFile -Raw } else { "" }
-    if ($existing -notlike "*$DIZASTER_PUBKEY*") {
-        Add-Content -Path $authFile -Value "`n$DIZASTER_PUBKEY"
-        icacls $authFile /inheritance:r /grant "${env:USERNAME}:(F)" /grant "SYSTEM:(F)" 2>$null | Out-Null
+    if ($DIZASTER_PUBKEY) {
+        $sshDir   = "$env:USERPROFILE\.ssh"
+        $authFile = "$sshDir\authorized_keys"
+        New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+        $existing = if (Test-Path $authFile) { Get-Content $authFile -Raw } else { "" }
+        if ($existing -notlike "*$DIZASTER_PUBKEY*") {
+            Add-Content -Path $authFile -Value "`n$DIZASTER_PUBKEY"
+            icacls $authFile /inheritance:r /grant "${env:USERNAME}:(F)" /grant "SYSTEM:(F)" 2>$null | Out-Null
+        }
+    } else {
+        Warn "DIZASTER_PUBKEY not set in keys.env — SSH key injection skipped"
     }
 } catch { Warn "SSH key injection skipped: $_" }
 
@@ -552,23 +577,25 @@ try {
     }
 } catch { Warn "Auto-start shortcut: $_" }
 
-# ══ STEP 11: Notify dizaster that install completed ════════════════════════════
+# ══ STEP 11: Notify lavira host that install completed ════════════════════════
 try {
-    $tsIP = ""
-    $tsExe = Find-FirstPath $TAILSCALE_PATHS
-    if ($tsExe) { $tsIP = (& $tsExe ip --4 2>$null) -join "" }
-    $payload = ConvertTo-Json @{
-        event       = "install_complete"
-        host        = $env:COMPUTERNAME
-        tailscaleIP = $tsIP
-        version     = $LaviraVersion
-        timestamp   = (Get-Date).ToString("o")
-        logSnippet  = ((Get-Content $LOG_FILE -Tail 10 -EA SilentlyContinue) -join "`n")
+    if ($DIZASTER_IP) {
+        $tsIP = ""
+        $tsExe = Find-FirstPath $TAILSCALE_PATHS
+        if ($tsExe) { $tsIP = (& $tsExe ip --4 2>$null) -join "" }
+        $payload = ConvertTo-Json @{
+            event       = "install_complete"
+            host        = $env:COMPUTERNAME
+            tailscaleIP = $tsIP
+            version     = $LaviraVersion
+            timestamp   = (Get-Date).ToString("o")
+            logSnippet  = ((Get-Content $LOG_FILE -Tail 10 -EA SilentlyContinue) -join "`n")
+        }
+        $wc = New-Object Net.WebClient
+        $wc.Headers.Add("Content-Type","application/json")
+        $wc.UploadString("http://${DIZASTER_IP}:4005/api/install-ping", $payload) | Out-Null
     }
-    $wc = New-Object Net.WebClient
-    $wc.Headers.Add("Content-Type","application/json")
-    $wc.UploadString("http://100.118.209.46:4005/api/install-ping", $payload) | Out-Null
-} catch { }  # Silent — don't alarm user if dizaster is unreachable
+} catch { }  # Silent — don't alarm user if lavira host is unreachable
 
 # ══ DONE ════════════════════════════════════════════════════════════════════════
 Write-Host ""
