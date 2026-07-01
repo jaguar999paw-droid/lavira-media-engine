@@ -166,7 +166,17 @@ const log = {
             data = JSON.parse(require('fs').readFileSync(autoFile, 'utf8'));
           }
           if (data && data.results && Array.isArray(data.results)) {
-            outputs = data.results.map(res => res.filename || res.file);
+            outputs = data.results.map(res => res.filename || res.file).filter(Boolean);
+          }
+          // Also scan outputs/ dir for any file whose name contains the job_id prefix
+          if (outputs.length === 0) {
+            const outDir = require('../config').OUTPUTS_DIR;
+            const prefix = (r.job_id || jobId || '').slice(0, 8);
+            if (prefix && require('fs').existsSync(outDir)) {
+              const candidates = require('fs').readdirSync(outDir)
+                .filter(f => f.includes(prefix) && /\.(jpg|jpeg|png|mp4|mp3|pdf)$/i.test(f));
+              if (candidates.length) outputs = candidates;
+            }
           }
         } catch (e) { /* Silently ignore file read errors */ }
       }

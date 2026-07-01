@@ -138,14 +138,14 @@ const TOOLS = [
     inputSchema:{ type:'object', properties:{} } },
   // DIRECT POSTING / PUBLISHING
   { name:'post_to_instagram',
-    description:'Publish a ready-to-post job to Instagram Reels, Feed, or Stories. Requires INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID in .env.',
-    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, format:{type:'string',enum:['reels','feed','stories']}, caption:{type:'string'} }, required:['jobId'] } },
+    description:'Publish a ready-to-post job to Instagram Reels, Feed, or Stories. Requires INSTAGRAM_ACCESS_TOKEN + INSTAGRAM_USER_ID in .env. Set dry_run:true to validate without posting.',
+    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, format:{type:'string',enum:['reels','feed','stories']}, caption:{type:'string'}, dry_run:{type:'boolean',description:'If true, validate and return what would be posted without actually posting'} }, required:['jobId'] } },
   { name:'post_to_tiktok',
-    description:'Publish a job to TikTok. Requires TIKTOK_ACCESS_TOKEN in .env. Auto-detects best video format.',
-    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, caption:{type:'string'} }, required:['jobId'] } },
+    description:'Publish a job to TikTok via v2 Content Posting API (3-step: init → upload chunks → poll). Requires TIKTOK_ACCESS_TOKEN in .env. Set dry_run:true to validate without posting.',
+    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, caption:{type:'string'}, dry_run:{type:'boolean',description:'If true, validate and return what would be posted without uploading'} }, required:['jobId'] } },
   { name:'post_to_facebook',
-    description:'Publish a job to Facebook page feed. Requires FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID in .env.',
-    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, caption:{type:'string'} }, required:['jobId'] } },
+    description:'Publish a job to Facebook page feed. Requires FACEBOOK_ACCESS_TOKEN + FACEBOOK_PAGE_ID in .env. Set dry_run:true to validate without posting.',
+    inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, caption:{type:'string'}, dry_run:{type:'boolean',description:'If true, validate and return what would be posted without actually posting'} }, required:['jobId'] } },
   { name:'publish_job',
     description:'Publish a finished job to multiple platforms at once. Fails gracefully if tokens aren\'t configured.',
     inputSchema:{ type:'object', properties:{ jobId:{type:'string'}, platforms:{type:'array',items:{type:'string'},enum:['instagram','tiktok','facebook']} }, required:['jobId'] } },
@@ -322,6 +322,9 @@ const TOOLS = [
   { name:'update_user_memory',
     description:'Append or replace a section in the LAVIRA_USER_MEMORY.md file. Use to update known issues, content calendar, session notes, or standing preferences.',
     inputSchema:{ type:'object', properties:{ section:{type:'string', description:'Section header to update (e.g. KNOWN ISSUES, CONTENT CALENDAR, STANDING PREFERENCES)'}, content:{type:'string', description:'New markdown content for the section'}, mode:{type:'string', enum:['append','replace'], description:'append adds below existing, replace overwrites section'} }, required:['content'] } },
+  { name:'generate_whatsapp_status',
+    description:'Generate a WhatsApp Status image (1080x1920, 9:16 portrait): full-bleed wildlife photo, dark gradient scrim, large hook text, WhatsApp CTA button, Lavira logo. Optimised for WhatsApp 24h status and IG Stories.',
+    inputSchema:{ type:'object', properties:{ destination:{type:'string',description:'Lavira destination (auto-selects LRU if omitted)'}, hook:{type:'string',description:'Headline text (auto-generated if omitted)'}, context:{type:'string',description:'Optional extra context for caption generation'} } } },
   { name:'cleanup_old_outputs',
     description:'Delete output files older than N days to free disk space. Skips files referenced in approved jobs. Returns list of deleted files.',
     inputSchema:{ type:'object', properties:{ olderThanDays:{type:'number', description:'Delete files older than this many days (default: 14)'}, dryRun:{type:'boolean', description:'If true, list files to delete without actually deleting'} } } },
@@ -344,8 +347,11 @@ async function handleTool(name, args) {
     if (fs.existsSync(fromRoot)) return fromRoot;
     return fp; // fall-through – let caller throw the proper error
   }
-  if (args.filePath)  args = { ...args, filePath:  resolveMediaPath(args.filePath)  };
-  if (args.mediaPath) args = { ...args, mediaPath: resolveMediaPath(args.mediaPath) };
+  if (args.filePath)   args = { ...args, filePath:   resolveMediaPath(args.filePath)   };
+  if (args.mediaPath)  args = { ...args, mediaPath:  resolveMediaPath(args.mediaPath)  };
+  if (args.filePathA)  args = { ...args, filePathA:  resolveMediaPath(args.filePathA)  };
+  if (args.filePathB)  args = { ...args, filePathB:  resolveMediaPath(args.filePathB)  };
+  if (args.imagePath)  args = { ...args, imagePath:  resolveMediaPath(args.imagePath)  };
 
   switch (name) {
 
@@ -636,7 +642,9 @@ async function handleTool(name, args) {
       const outputs = fs.readdirSync(cfg.OUTPUTS_DIR);
       const mediaFiles = outputs.filter(f=>/\.(mp4|jpg|mp3|gif)$/i.test(f)).length;
       const diskUsage = outputs.reduce((acc,f)=>{ try { return acc+fs.statSync(path.join(cfg.OUTPUTS_DIR,f)).size; } catch { return acc; } },0);
-      return { status:'ok', version:'3.0', ffmpeg:ffmpegOk, aiConfigured:!!cfg.ANTHROPIC_KEY, giphyConfigured:!!cfg.GIPHY_KEY, pexelsConfigured:!!process.env.PEXELS_API_KEY, outputFiles:mediaFiles, diskUsageMB:(diskUsage/1024/1024).toFixed(1), brand:BRAND.name, destinations:BRAND.destinations.length, packages:BRAND.safari_packages?.length||0 };
+      let toolMetrics = [];
+      try { const rpcCore = require('./lib/rpc-core'); toolMetrics = rpcCore.getMetrics ? rpcCore.getMetrics() : []; } catch {}
+      return { status:'ok', version:'3.0', ffmpeg:ffmpegOk, aiConfigured:!!cfg.ANTHROPIC_KEY, giphyConfigured:!!cfg.GIPHY_KEY, pexelsConfigured:!!process.env.PEXELS_API_KEY, outputFiles:mediaFiles, diskUsageMB:(diskUsage/1024/1024).toFixed(1), brand:BRAND.name, destinations:BRAND.destinations.length, packages:BRAND.safari_packages?.length||0, toolMetrics };
     }
 
     case 'list_upload_files':
@@ -648,19 +656,27 @@ async function handleTool(name, args) {
       const f = path.join(cfg.OUTPUTS_DIR, `${args.jobId}.json`);
       if (!fs.existsSync(f)) throw new Error('Job not found: ' + args.jobId);
       const state = JSON.parse(fs.readFileSync(f,'utf8'));
-      const caption = args.caption || state.promo?.caption || '';
-      const result = await pub.publishInstagram({ videoPath: path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || ''), caption });
-      return { jobId:args.jobId, platform:'instagram', ...result, statusUrl:`/api/job/${args.jobId}` };
+      let caption = args.caption || state.promo?.caption || '';
+      const INSTA_LIMIT = 2200;
+      const captionWarning = caption.length > INSTA_LIMIT ? `Caption truncated from ${caption.length} to ${INSTA_LIMIT} chars` : null;
+      if (caption.length > INSTA_LIMIT) caption = caption.slice(0, INSTA_LIMIT);
+      const filePath = path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || '');
+      if (args.dry_run) {
+        return { dryRun:true, jobId:args.jobId, platform:'instagram', wouldPost:{ filePath, caption, captionLength:caption.length }, captionWarning, fileExists:fs.existsSync(filePath) };
+      }
+      const result = await pub.publishInstagram({ videoPath: filePath, caption });
+      return { jobId:args.jobId, platform:'instagram', captionWarning, ...result, statusUrl:`/api/job/${args.jobId}` };
     }
 
     case 'post_to_tiktok': {
-      const pub = require('../publishing/index');
+      const tiktok = require('../publishing/tiktok');
       const f = path.join(cfg.OUTPUTS_DIR, `${args.jobId}.json`);
       if (!fs.existsSync(f)) throw new Error('Job not found: ' + args.jobId);
       const state = JSON.parse(fs.readFileSync(f,'utf8'));
-      const caption = args.caption || state.promo?.caption || '';
-      const result = await pub.publishTikTok({ videoPath: path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || ''), caption });
-      return { jobId:args.jobId, platform:'tiktok', ...result, statusUrl:`/api/job/${args.jobId}` };
+      let caption = args.caption || state.promo?.caption || '';
+      const filePath = path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || '');
+      const result = await tiktok.publishToTikTok({ filePath, caption, dryRun: args.dry_run });
+      return { jobId:args.jobId, ...result, statusUrl:`/api/job/${args.jobId}` };
     }
 
     case 'post_to_facebook': {
@@ -668,9 +684,16 @@ async function handleTool(name, args) {
       const f = path.join(cfg.OUTPUTS_DIR, `${args.jobId}.json`);
       if (!fs.existsSync(f)) throw new Error('Job not found: ' + args.jobId);
       const state = JSON.parse(fs.readFileSync(f,'utf8'));
-      const caption = args.caption || state.promo?.caption || '';
-      const result = await pub.publishFacebook({ videoPath: path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || ''), caption });
-      return { jobId:args.jobId, platform:'facebook', ...result, statusUrl:`/api/job/${args.jobId}` };
+      let caption = args.caption || state.promo?.caption || '';
+      const FB_LIMIT = 63206;
+      const captionWarning = caption.length > FB_LIMIT ? `Caption truncated from ${caption.length} to ${FB_LIMIT} chars` : null;
+      if (caption.length > FB_LIMIT) caption = caption.slice(0, FB_LIMIT);
+      const filePath = path.join(cfg.OUTPUTS_DIR, (state.results?.[0])?.filename || '');
+      if (args.dry_run) {
+        return { dryRun:true, jobId:args.jobId, platform:'facebook', wouldPost:{ filePath, caption, captionLength:caption.length }, captionWarning, fileExists:fs.existsSync(filePath) };
+      }
+      const result = await pub.publishFacebook({ videoPath: filePath, caption });
+      return { jobId:args.jobId, platform:'facebook', captionWarning, ...result, statusUrl:`/api/job/${args.jobId}` };
     }
 
     case 'publish_job': {
@@ -1095,16 +1118,14 @@ async function handleTool(name, args) {
 
     // ─── ROTATION & DEDUP ────────────────────────────────────────────────────
     case 'get_destination_rotation_status': {
-      // Bug4 fix: return plain object, server serialiser wraps it
       const { rotationStatus } = require('../orchestrator/memory');
-      const status = rotationStatus.get(BRAND.destinations);
-      return status;
+      return rotationStatus.get(BRAND.destinations);
     }
 
     case 'check_content_duplicate': {
       const { checkDuplicate } = require('../orchestrator/memory');
       const result = checkDuplicate(args.caption, args.destination, args.windowDays || 14);
-      return { content:[{ type:'text', text: JSON.stringify(result) }] };
+      return result;
     }
 
     // ─── BOOKING TRIGGERS ────────────────────────────────────────────────────
@@ -1121,7 +1142,7 @@ async function handleTool(name, args) {
         triggerReq.on('error', () => {});
         triggerReq.end();
       }
-      return { content:[{ type:'text', text: JSON.stringify({ success:true, bookingId, message:'Booking recorded. Content generation triggered.' }) }] };
+      return { success: true, bookingId, message: 'Booking recorded. Content generation triggered.' };
     }
 
     case 'trigger_post_booking_flow': {
@@ -1138,23 +1159,44 @@ async function handleTool(name, args) {
         req2.on('error', reject);
         req2.end();
       });
-      return { content:[{ type:'text', text: JSON.stringify(resp) }] };
+      return resp;
     }
 
     case 'list_booking_events': {
       const { bookings: bkgs2 } = require('../orchestrator/memory');
       const list = bkgs2.getRecent(args.limit || 20);
-      return { content:[{ type:'text', text: JSON.stringify(list, null, 2) }] };
+      return list;
     }
 
 
     case 'smart_generate': {
+      // Gate: run pre_flight_check first so clarification rules are respected
+      if (!args._preflight_done) {
+        try {
+          const pf = await handleTool('pre_flight_check', {
+            prompt:      args.prompt || '',
+            destination: args.overrideDestination,
+            platform:    args.overridePlatform,
+            mediaType:   args.overrideMediaType,
+          });
+          if (pf && pf.clarification_needed) {
+            return { clarification_needed: true, questions: pf.questions, partial_intent: pf.partial_intent };
+          }
+          // Merge resolved values back
+          if (pf && pf.resolved) {
+            args.overrideDestination = args.overrideDestination || pf.resolved.destination;
+            args.overridePlatform    = args.overridePlatform    || pf.resolved.platform;
+            args.overrideMediaType   = args.overrideMediaType   || pf.resolved.mediaType;
+            args.overrideTheme       = args.overrideTheme       || pf.resolved.theme;
+          }
+        } catch (_) { /* pre_flight_check unavailable — proceed with raw intent */ }
+      }
       const parsed = intent.parseIntent(args.prompt || '');
       const dest = args.overrideDestination || parsed.destination || undefined;
       const theme = args.overrideTheme || parsed.theme;
       const platform = args.overridePlatform || parsed.platform;
       const profiles = (intent.PLATFORM_MAP[platform] || intent.PLATFORM_MAP['default']).profiles;
-      const mediaType = parsed.mediaType;
+      const mediaType = args.overrideMediaType || parsed.mediaType;
       const wfResult = await handleTool('create_post_workflow', {
         destination: dest, theme, mediaType,
         context: platform + ' post for ' + theme,
@@ -1306,6 +1348,46 @@ async function handleTool(name, args) {
       } else { _mc += '\n' + _nc + '\n'; }
       fs.writeFileSync(_mp, _mc, 'utf8');
       return { success: true, section: _sec || 'appended', mode: _mode };
+    }
+
+
+    case 'generate_whatsapp_status': {
+      const dest = args.destination || lruDestination();
+      const profiles = ['instagram_story'];
+      let result;
+      try {
+        result = await promoEng.generateAutoPromo({ destination: dest, theme: 'wildlife_spotlight', context: args.context || '', profiles });
+      } catch (e) {
+        return { error: e.message, destination: dest, tip: 'Check Pexels API key and network.' };
+      }
+      const hook = args.hook || result.promo?.hook || 'Africa is calling.';
+      const caption = [
+        '🌅 ' + hook,
+        '',
+        result.promo?.caption || '',
+        '',
+        '📲 Chat us: wa.me/254721757387',
+        '🌐 lavirasafaris.com',
+        '📸 @lavirasafaris',
+        '',
+        (result.promo?.hashtags || []).slice(0, 8).join(' ')
+        ].join('\n');
+      const jobId = 'wa_' + require('uuid').v4().slice(0, 8);
+      log.insert({ jobId, mediaType: 'whatsapp_status', destination: dest, caption: result.promo?.caption || '', platforms: ['whatsapp'], status: 'done' });
+      const stateFile = path.join(cfg.OUTPUTS_DIR, jobId + '.json');
+      const s = { status: 'done', jobId, mediaType: 'whatsapp_status', destination: dest, promo: result.promo, results: result.results, caption };
+      fs.writeFileSync(stateFile, JSON.stringify(s));
+      // Auto-save to posts/whatsapp/
+      const waPostsDir = require('path').join(cfg.POSTS_DIR, 'whatsapp');
+      fs.mkdirSync(waPostsDir, { recursive: true });
+      const waSaved = [];
+      for (const r of (result.results || [])) {
+        if (!r.filename) continue;
+        const src2 = require('path').join(cfg.OUTPUTS_DIR, r.filename);
+        const dst  = require('path').join(waPostsDir, r.filename);
+        try { if (fs.existsSync(src2) && !fs.existsSync(dst)) { fs.copyFileSync(src2, dst); waSaved.push(r.filename); } } catch {}
+      }
+      return { jobId, destination: dest, hook, caption, results: result.results, files: (result.results || []).map(r => ({ filename: r.filename, url: '/outputs/' + r.filename })), savedToPosts: waSaved.map(f => '/posts/whatsapp/' + f), tip: 'Caption is pre-formatted for WhatsApp status. Files are 1080x1920 story format.' };
     }
 
     case 'cleanup_old_outputs': {

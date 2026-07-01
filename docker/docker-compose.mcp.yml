@@ -1,0 +1,123 @@
+# Lavira Media Engine - containerised MCP sub-servers
+# Usage:
+#   cd ~/lavira-media-engine && docker compose -f docker/docker-compose.mcp.yml up -d
+# Claude Desktop config then spawns each tool via:
+#   { "command": "docker", "args": ["exec", "-i", "lavira-mcp-<name>", "node", "src/mcp/servers/<name>-server.js"] }
+
+x-common: &common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.mcp
+  image: lavira-mcp:latest
+  restart: unless-stopped
+  env_file:
+    - ../.env
+  environment:
+    DOTENV_CONFIG_QUIET: "true"   # suppress dotenv's injected stderr tip line
+    DOTENV_CONFIG_PATH: ""        # env already injected via env_file; rpc-core's dotenv.config() is a harmless no-op
+    # .env on the host carries host-absolute paths -- override here so every module
+    # writes into the named volumes mounted into the container, not a host path that doesn't exist inside it.
+    UPLOADS_DIR: /app/uploads
+    OUTPUTS_DIR: /app/outputs
+    ASSETS_DIR:  /app/assets
+    DB_PATH:     /app/data/lavira.db
+  volumes:
+    - uploads:/app/uploads
+    - outputs:/app/outputs
+    - assets:/app/assets
+    - db:/app/data
+  networks:
+    - lavira-mcp-net
+  security_opt:
+    - no-new-privileges:true
+  read_only: false   # engines write to outputs/uploads/assets; filesystem itself stays in named volumes, not bind mounts
+
+services:
+  # One-shot init: named volumes are auto-created root-owned by Docker; distroless containers
+  # run as uid 65532 (nonroot) and can't write to them until ownership is fixed once.
+  volume-init:
+    image: alpine:latest
+    container_name: lavira-mcp-volume-init
+    volumes:
+      - uploads:/v/uploads
+      - outputs:/v/outputs
+      - assets:/v/assets
+      - db:/v/data
+    command: chown -R 65532:65532 /v/uploads /v/outputs /v/assets /v/data
+    restart: "no"
+
+  media:
+    <<: *common
+    container_name: lavira-mcp-media
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "2.0", memory: 1536M }   # ffmpeg/sharp transforms -- heaviest module
+        reservations: { cpus: "0.5", memory: 256M }
+
+  publish:
+    <<: *common
+    container_name: lavira-mcp-publish
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }    # network calls + sqlite, light CPU
+        reservations: { cpus: "0.1", memory: 64M }
+
+  brand:
+    <<: *common
+    container_name: lavira-mcp-brand
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 384M }    # calls Anthropic API for captions
+        reservations: { cpus: "0.1", memory: 64M }
+
+  design:
+    <<: *common
+    container_name: lavira-mcp-design
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 768M }    # compositor/sharp rendering
+        reservations: { cpus: "0.25", memory: 128M }
+
+  ops:
+    <<: *common
+    container_name: lavira-mcp-ops
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }   # fs stat/cleanup only
+        reservations: { cpus: "0.05", memory: 32M }
+
+  search:
+    <<: *common
+    container_name: lavira-mcp-search
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }    # external API calls (Pexels/GIPHY)
+        reservations: { cpus: "0.1", memory: 64M }
+
+volumes:
+  uploads:
+  outputs:
+  assets:
+  db:
+
+networks:
+  lavira-mcp-net:
+    driver: bridge

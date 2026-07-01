@@ -14,6 +14,7 @@ const BRAND   = require('../orchestrator/brand');
 const { generatePromoPackage } = require('../content/ai-captions');
 const { resolvePostData } = require('./post-defaults');
 const mediaLib = require('./media-library');
+const { log } = require('../orchestrator/memory');
 
 const OUTPUTS_DIR = cfg.OUTPUTS_DIR;
 
@@ -128,7 +129,7 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
 
   // 1. Fetch promo package (caption, hook, hashtags) in parallel with image search
   const [promoResult, pexelsResult] = await Promise.all([
-    generatePromoPackage({ destination: dest, mediaType: 'auto', context: context || `${thm} post for ${dest}`, recentCaptions: recentCaptions || [] }),
+    generatePromoPackage({ destination: dest, mediaType: 'auto', context: context || `${thm} post for ${dest}`, recentCaptions: (() => { try { return log.getRecent(5).map(r => r.caption).filter(Boolean); } catch(_) { return recentCaptions || []; } })() }),
     searchPexels(query, 5)
   ]);
 

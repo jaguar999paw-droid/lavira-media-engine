@@ -52,3 +52,6 @@ src/mcp/*.bak*
 src/orchestrator/*.bak*
 src/publishing/*.bak*
 \n# Old hardcoded TS key pattern (never allow back)\n# tskey-auth*
+
+# ── Local convenience (host-specific symlinks, not portable) ──
+media-library/

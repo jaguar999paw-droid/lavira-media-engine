@@ -8,8 +8,16 @@ const mp   = require('./multi-platform');
 
 // Re-export all platform functions
 const { getPlatformStatus, broadcastToAll, getSetupGuide,
-  publishInstagram, publishFacebook, publishTikTok,
+  publishInstagram, publishFacebook,
   publishTwitter, publishWhatsApp, publishTelegram, adaptCaption } = mp;
+
+// Use dedicated tiktok.js (real v2 Content Posting API with chunked upload)
+let _tiktok;
+try { _tiktok = require('./tiktok'); } catch {}
+async function publishTikTok(args) {
+  if (_tiktok?.publishToTikTok) return _tiktok.publishToTikTok(args);
+  return mp.publishTikTok ? mp.publishTikTok(args) : { status:'error', message:'TikTok publisher not available' };
+}
 
 // Legacy compat
 function platformStatus() { return getPlatformStatus(); }

@@ -19,6 +19,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // ── Routes ──────────────────────────────────────────────────────────────────
 app.use('/api/bookings', require('./routes/bookings'));
+app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/intake', require('./routes/intake'));
 app.use('/api',        require('./routes/output'));
 

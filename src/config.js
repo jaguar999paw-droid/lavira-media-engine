@@ -40,12 +40,22 @@ module.exports = {
   ANTHROPIC_KEY: process.env.ANTHROPIC_API_KEY || '',
   GIPHY_KEY:    process.env.GIPHY_API_KEY || '',
   PEXELS_KEY:   process.env.PEXELS_API_KEY || '',
-  UPLOADS_DIR:  path.join(ROOT, process.env.UPLOADS_DIR || 'uploads'),
+  // path.join() does NOT special-case absolute second arguments (unlike path.resolve()),
+  // so an absolute env override here used to get concatenated onto ROOT instead of replacing it
+  // (e.g. ROOT=/app + UPLOADS_DIR=/app/uploads => /app/app/uploads). Resolve absolute envs as-is,
+  // same pattern already used below for DB_PATH.
+  UPLOADS_DIR:  path.isAbsolute(process.env.UPLOADS_DIR || '')
+                  ? process.env.UPLOADS_DIR
+                  : path.join(ROOT, process.env.UPLOADS_DIR || 'uploads'),
   POSTS_DIR:    path.join(ROOT, 'posts'),
-  OUTPUTS_DIR:     path.join(ROOT, process.env.OUTPUTS_DIR || 'outputs'),
+  OUTPUTS_DIR:  path.isAbsolute(process.env.OUTPUTS_DIR || '')
+                  ? process.env.OUTPUTS_DIR
+                  : path.join(ROOT, process.env.OUTPUTS_DIR || 'outputs'),
   MCP_OUTPUTS_DIR: path.join(ROOT, process.env.MCP_OUTPUTS_DIR || 'outputs/mcp'),
   UI_OUTPUTS_DIR:  path.join(ROOT, process.env.UI_OUTPUTS_DIR  || 'outputs/ui'),
-  ASSETS_DIR:      path.join(ROOT, process.env.ASSETS_DIR || 'assets'),
+  ASSETS_DIR:   path.isAbsolute(process.env.ASSETS_DIR || '')
+                  ? process.env.ASSETS_DIR
+                  : path.join(ROOT, process.env.ASSETS_DIR || 'assets'),
   DB_PATH:      path.isAbsolute(process.env.DB_PATH || '')
                   ? process.env.DB_PATH
                   : path.join(ROOT, process.env.DB_PATH || 'lavira.db'),

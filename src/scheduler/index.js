@@ -1,3 +1,68 @@
+
+// ── SCHEDULED POST EXECUTOR ──────────────────────────────────────────────────
+// Fires every minute, checks the `schedule` DB table for pending rows due now.
+function getScheduleDB() {
+  const Database = require('better-sqlite3');
+  return new Database(cfg.DB_PATH || require('path').join(require('path').resolve(__dirname, '../..'), 'lavira.db'));
+}
+
+async function fireScheduledPosts() {
+  let db;
+  try {
+    db = getScheduleDB();
+    db.exec(`CREATE TABLE IF NOT EXISTS schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_path TEXT, caption TEXT, scheduled_at TEXT,
+      platforms TEXT, status TEXT DEFAULT 'pending', created_at TEXT
+    )`);
+    const now = new Date().toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
+    const due = db.prepare(
+      "SELECT * FROM schedule WHERE status='pending' AND substr(scheduled_at,1,16) <= ?"
+    ).all(now);
+    if (!due.length) return;
+
+    const mp = (() => { try { return require('../publishing/multi-platform'); } catch { return null; } })();
+
+    for (const row of due) {
+      const platforms = JSON.parse(row.platforms || '[]');
+      let result = { note: 'no publisher available' };
+      try {
+        if (mp && typeof mp.broadcastToAll === 'function') {
+          result = await mp.broadcastToAll({
+            filePath: row.file_path,
+            caption:  row.caption,
+            platforms: platforms.length ? platforms : ['whatsapp'],
+          });
+        }
+        db.prepare("UPDATE schedule SET status='sent' WHERE id=?").run(row.id);
+        console.log(`[Scheduler] Fired scheduled post id=${row.id} → ${platforms.join(',')}`);
+      } catch (e) {
+        db.prepare("UPDATE schedule SET status='failed' WHERE id=?").run(row.id);
+        console.error(`[Scheduler] Failed scheduled post id=${row.id}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    console.error('[Scheduler] fireScheduledPosts error:', e.message);
+  } finally {
+    if (db) try { db.close(); } catch {}
+  }
+}
+
+function schedulePost({ filePath, caption, scheduledAt, platforms = [] }) {
+  const db = getScheduleDB();
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_path TEXT, caption TEXT, scheduled_at TEXT,
+      platforms TEXT, status TEXT DEFAULT 'pending', created_at TEXT
+    )`);
+    const info = db.prepare(
+      'INSERT INTO schedule (file_path, caption, scheduled_at, platforms, created_at) VALUES (?,?,?,?,?)'
+    ).run(filePath, caption, scheduledAt, JSON.stringify(platforms), new Date().toISOString());
+    return { scheduled: true, id: info.lastInsertRowid, scheduledAt, platforms };
+  } finally { db.close(); }
+}
+
 // scheduler/index.js — v3.1: uses full auto-promo engine (Pexels + Sharp + AI caption fallback)
 'use strict';
 const cron = require('node-cron');
@@ -122,6 +187,9 @@ async function generateDailyPromo() {
 function start() {
   // 06:00 EAT = 03:00 UTC
   cron.schedule('0 3 * * *', () => generateDailyPromo(), { timezone: 'UTC' });
+  // Fire scheduled posts every minute
+  cron.schedule('* * * * *', () => fireScheduledPosts().catch(() => {}));
+  console.log('  [Scheduler] Scheduled-post executor cron active (every minute)');
   // Boot: run 10s after server start — non-blocking
   setTimeout(() => generateDailyPromo().catch(() => {}), 10000);
   console.log('  [Scheduler] Daily auto-promo cron active — 06:00 EAT (uses Pexels + AI captions)');
@@ -139,4 +207,4 @@ function approveScheduledEntry(id) {
   return entry;
 }
 
-module.exports = { start, getSchedule, generateDailyPromo, approveScheduledEntry };
+module.exports = { start, getSchedule, generateDailyPromo, approveScheduledEntry, schedulePost, fireScheduledPosts };

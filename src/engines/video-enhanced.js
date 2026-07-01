@@ -1,3 +1,15 @@
+
+// Safe FPS fraction parser - never eval()
+function parseFps(str) {
+  if (!str) return null;
+  const parts = String(str).split('/');
+  if (parts.length === 2) {
+    const n = parseFloat(parts[0]), d = parseFloat(parts[1]);
+    return (d && d !== 0) ? Math.round((n / d) * 100) / 100 : n;
+  }
+  return parseFloat(str) || null;
+}
+
 // engines/video-enhanced.js — Lavira Video Intelligence Engine v2
 // Capabilities: clip, trim, search, post-lengths, thumbnail, probe, platform-encode
 'use strict';
@@ -36,7 +48,7 @@ function probeVideo(filePath) {
         sizeMB: (parseInt(data.format.size || 0) / 1024 / 1024).toFixed(2),
         bitrate: data.format.bit_rate,
         width: vStream?.width, height: vStream?.height,
-        fps: vStream ? eval(vStream.avg_frame_rate) : null,
+        fps: vStream ? parseFps(vStream.avg_frame_rate) : null,
         videoCodec: vStream?.codec_name,
         audioCodec: aStream?.codec_name,
         hasAudio: !!aStream,
@@ -235,16 +247,8 @@ async function fullVideoPostPipeline(opts) {
   const rawDur = parseFloat(probe.duration || best.duration || targetSecs);
   const startSec = rawDur > targetSecs * 1.5 ? Math.floor((rawDur - targetSecs) / 2) : 0;
   const tmpClip = path.join(require('os').tmpdir(), 'lavira_clip_' + uuid().slice(0,8) + '.mp4');
-  await clipVideo(tmpRaw, startSec, Math.min(targetSecs, rawDur));
-  // clipVideo writes to auto-path, re-clip to tmpClip explicitly
-  await new Promise((res, rej) => {
-    const ff = require('fluent-ffmpeg');
-    ff(tmpRaw)
-      .setStartTime(startSec).setDuration(Math.min(targetSecs, rawDur))
-      .output(tmpClip)
-      .outputOptions(['-c copy'])
-      .on('end', res).on('error', rej).run();
-  });
+  // Single clip pass to tmpClip (stream-copy, no re-encode)
+  await clipVideo(tmpRaw, startSec, Math.min(targetSecs, rawDur), tmpClip);
 
   // 5. ENCODE for platform (scale + fps + bitrate)
   const encoded = await encodeForPlatform(tmpClip, platform, { maxSeconds: targetSecs });

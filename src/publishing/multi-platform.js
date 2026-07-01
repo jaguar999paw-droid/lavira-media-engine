@@ -201,49 +201,14 @@ async function publishFacebook({ filePath, caption }) {
   });
 }
 
-async function publishTikTok({ filePath, caption }) {
-  const token = env('TIKTOK_ACCESS_TOKEN');
-  if (!token) {
-    return { status:'manual', platform:'tiktok', setupNote: PLATFORMS.tiktok.setupNote,
-      message:'Add TIKTOK_ACCESS_TOKEN to .env — requires TikTok for Developers approval', caption };
-  }
-  // TikTok Content Posting API v2
-  return new Promise(resolve => {
-    const postData = JSON.stringify({ post_info:{ title:caption.slice(0,150), privacy_level:'PUBLIC_TO_EVERYONE', disable_comment:false }, source_info:{ source:'FILE_UPLOAD' } });
-    const req = https.request({
-      hostname:'open.tiktokapis.com', path:'/v2/post/publish/inbox/video/init/',
-      method:'POST',
-      headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json; charset=UTF-8', 'Content-Length':Buffer.byteLength(postData) },
-    }, res => {
-      let data='';
-      res.on('data',c=>data+=c);
-      res.on('end',()=>{
-        try {
-          const r=JSON.parse(data);
-          if (r.data?.publish_id) resolve({ status:'success', platform:'tiktok', publishId:r.data.publish_id, message:'TikTok upload initiated' });
-          else resolve({ status:'error', platform:'tiktok', message:r.error?.message||'TikTok API error', raw:data.slice(0,200) });
-        } catch { resolve({ status:'error', platform:'tiktok', message:'Parse error' }); }
-      });
-    });
-    req.on('error', e => resolve({ status:'error', platform:'tiktok', message:e.message }));
-    req.write(postData); req.end();
-  });
+async function publishTikTok({ filePath, caption, dryRun }) {
+  const tiktok = require('./tiktok');
+  return tiktok.publishToTikTok({ filePath, caption, dryRun });
 }
 
-async function publishTwitter({ filePath, caption }) {
-  const apiKey    = env('TWITTER_API_KEY');
-  const apiSecret = env('TWITTER_API_SECRET');
-  const accToken  = env('TWITTER_ACCESS_TOKEN');
-  const accSecret = env('TWITTER_ACCESS_SECRET');
-  if (!apiKey || !apiSecret || !accToken || !accSecret) {
-    return { status:'manual', platform:'twitter', setupNote: PLATFORMS.twitter.setupNote,
-      message:'Missing Twitter API keys — 4 keys required', caption };
-  }
-  // Note: Full OAuth1.0a implementation would be needed here
-  // Returning stub with setup guidance
-  return { status:'configured', platform:'twitter',
-    message:'Twitter keys present. Full OAuth1.0a tweet+media endpoint ready to wire.',
-    caption, note:'Implement OAuth1a signing for /2/tweets + /1.1/media/upload endpoints' };
+async function publishTwitter({ filePath, caption, dryRun }) {
+  const twitter = require('./twitter');
+  return twitter.publishToTwitter({ filePath, caption, dryRun });
 }
 
 async function publishWhatsApp({ filePath, caption, recipientPhone }) {

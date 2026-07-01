@@ -1,0 +1,26 @@
+# Lavira Media Engine - MCP sub-server container
+# Built on Google's distroless Node 24 image (gcr.io) rather than Docker Hub's node:* images,
+# since Docker Hub registry pulls are unreliable/blocked on this host's network path (confirmed
+# via diagnostics: gcr.io pulls succeed consistently, registry-1.docker.io TLS-handshake-times-out).
+#
+# Native deps (sharp, better-sqlite3) are pre-built on the HOST (matching Node 24, glibc/x86_64)
+# and copied in directly -- distroless has no npm/shell to run `npm ci` inside the image at all,
+# so dependency installation happens host-side, before `docker build`.
+
+FROM gcr.io/distroless/nodejs24-debian12
+
+WORKDIR /app
+
+# Pre-built node_modules + manifest, copied verbatim from the host build (see build.sh)
+COPY package.json package-lock.json ./
+COPY node_modules ./node_modules
+COPY src ./src
+
+# distroless images already run as a non-root 'nonroot' user by default
+USER nonroot
+
+# Idle by default -- Claude Desktop attaches per tool-call via:
+#   docker exec -i <container> /nodejs/bin/node src/mcp/servers/<name>-server.js
+# distroless has no shell/coreutils (no `tail`), so the idle loop is pure JS.
+ENTRYPOINT ["/nodejs/bin/node"]
+CMD ["-e", "setInterval(() => {}, 2147483647)"]

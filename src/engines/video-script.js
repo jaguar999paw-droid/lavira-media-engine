@@ -98,7 +98,7 @@ function generateFallbackScript(destination, duration = 30) {
       {
         section: 'Wildlife close-up',
         duration: 7,
-        text: destInfo.wildlife?.[0] ? `From the majestic ${destInfo.wildlife[0]} to hidden wonders around every corner, ${destination} tells stories only Africa can tell.` : 'From wildlife encounters to hidden wonders, Africa's story unfolds before your eyes.'
+        text: destInfo.wildlife?.[0] ? `From the majestic ${destInfo.wildlife[0]} to hidden wonders around every corner, ${destination} tells stories only Africa can tell.` : "From wildlife encounters to hidden wonders, Africa's story unfolds before your eyes."
       },
       {
         section: 'Action/activity sequence',
@@ -113,7 +113,7 @@ function generateFallbackScript(destination, duration = 30) {
     ],
     cta: `Your African adventure starts at ${BRAND.website} • WhatsApp: ${BRAND.phone}`,
     hashtags: [
-      `#${destination.replace(/\\s/g, '')}Safari`,
+      `#${destination.replace(/\s+/g, '')}Safari`,
       '#LaviraSafaris',
       '#AfrikanAdventure',
       '#SafariOfALifetime',

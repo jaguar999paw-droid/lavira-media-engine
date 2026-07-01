@@ -41,6 +41,27 @@ function randomUSP() {
   return usps.length ? usps[Math.floor(Math.random() * usps.length)] : '';
 }
 
+
+// Seasonal context: maps current month to Kenya safari conditions
+function getSeasonalContext() {
+  const m = new Date().getMonth();
+  const ctx = [
+    'January: dry season — excellent lion and cheetah sightings on open plains.',
+    'February: peak dry season — superb game viewing, Amboseli at its best.',
+    'March: short rains start — lush landscapes, fewer crowds.',
+    'April: long rains — low-season deals, dramatic skies for photography.',
+    'May: long rains continue — emerald scenery, private bush feel.',
+    'June: dry season returns — Great Migration wildebeest massing in the Mara.',
+    'July: Great Migration peak — river crossings begin at Masai Mara.',
+    'August: peak Migration — dramatic Mara River crossings, highest demand.',
+    'September: Migration continues — big cat activity extremely high.',
+    'October: short dry spell — calving season in Tanzania, elephants active.',
+    'November: short rains — green season, newborn wildlife everywhere.',
+    'December: festive season — family safaris, warm weather, year-end magic.',
+  ];
+  return ctx[m] || '';
+}
+
 async function generateAICaption({ destination, mediaType = 'video', context = '', recentCaptions = [] }) {
   // Fall back to rich static templates if no key or insufficient credits
   if (!cfg.ANTHROPIC_KEY) return FALLBACK.generateCaption(destination);

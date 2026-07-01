@@ -123,3 +123,20 @@
 - Hook: "Africa's River Giants Await 🦛"
 - Package promo: 2 Days Masai Mara Safari
 
+
+---
+
+## 🔒 AGENT RULES (auto-injected — do not remove)
+
+- **Rules file:** `/home/kamau/lavira-media-engine/AGENT_RULES.md`
+- **Active since:** 2026-06-09
+- **Enforced by:** `pre_flight_check` tool in `lavira-brand` MCP server
+- **Rule summary:**
+  - Rule 1: Output = .jpg / .png / .mp4 / .pdf only. Never HTML as post output.
+  - Rule 2: All media lands in `outputs/` first. Posts dir only on explicit platform request.
+  - Rule 3: Call `pre_flight_check` before every generative workflow.
+  - Rule 4: Standard tool execution order — preflight → source → brand → caption → package → (optionally) publish.
+  - Rule 5: Rotate destinations (LRU), palettes, and templates. Season-aware copy.
+  - Rule 6: Quality gate before publish — verify file exists, non-zero, correct dimensions.
+  - Rule 7: On failure — report tool name + error. No silent fallbacks.
+  - Rule 8: Update this memory file at end of every session.
