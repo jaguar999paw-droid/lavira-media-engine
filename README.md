@@ -1,6 +1,6 @@
 # Lavira Media Engine
 
-> AI-powered safari content engine — branded posts, videos, and 77 Claude MCP tools.
+> AI-powered safari content engine — turns a destination name into a fully branded, ready-to-publish social post, orchestrated end-to-end through Claude via MCP.
 
 [![Release](https://img.shields.io/github/v/release/jaguar999paw-droid/lavira-media-engine)](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
@@ -9,142 +9,35 @@
 
 ## What it does
 
-Lavira takes a destination name and produces a complete, branded social media post — stock photo or video, logo overlay, AI caption, hashtags — ready to publish to Instagram, Facebook, or TikTok. Everything is controllable via 77 MCP tools that plug directly into Claude Desktop.
+Lavira takes a destination and produces a complete, branded social media post — stock photo or video, logo overlay, AI-written caption, hashtags — ready to publish to Instagram, Facebook, TikTok, or WhatsApp Status. Every capability is exposed as an MCP tool, so the entire content pipeline (search, edit, brand, caption, schedule, publish) is driven conversationally from Claude Desktop rather than a bespoke UI.
 
 ---
 
-## Windows Setup
+## Architecture: federated MCP servers
 
-**Requirements:** Windows 10 or 11 (64-bit) · Internet connection · ~15 min on first run
+Lavira originally shipped as a single monolithic MCP server exposing all tools at once. It has since been split into six focused, independently deployable MCP sub-servers, each owning one slice of the pipeline. This keeps blast radius small when one area changes, lets each server be tested and containerized on its own, and makes the tool surface easier to reason about from the Claude side.
 
-**1. Download the ZIP**
+| Server | Responsibility | Status |
+|---|---|---|
+| **media** | Sourcing and processing images/video — stock search, cropping, watermarking, encoding, format export per platform | Core logic stable; containerized build still being verified end-to-end |
+| **publish** | Posting finished content to Instagram, Facebook, TikTok, and WhatsApp | Stable, containerized |
+| **brand** | Brand identity, overlay templates, theming, card generation | Stable, containerized |
+| **design** | Promo packages, captions, hashtag generation, marketing payloads | Stable, containerized |
+| **ops** | Admin settings, cache management, health checks, cleanup jobs | Stable, containerized |
+| **search** | Ranking and selecting external media for a given content brief | Stable, containerized |
 
-Go to the [**latest release**](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest) and download:
-```
-lavira-media-engine-windows-setup.zip
-```
+**Recent hardening work** across the sub-servers included closing a command-injection vector in shell-invoking tool paths, fixing a bug where a shared SQLite connection could be torn down out from under a concurrent request, and replacing a shallow object merge in settings updates with a proper deep merge (previously a partial settings patch could silently wipe unrelated nested config).
 
-**2. Extract it**
-
-Right-click the ZIP → **Extract All** → choose any folder (e.g. your Desktop).
-
-**3. Run the installer**
-
-Double-click **`Install-Lavira.bat`** inside the extracted folder.  
-Click **Yes** when Windows asks for permission.
-
-The installer handles everything automatically:
-- Docker Desktop
-- Claude Desktop (pre-wired to Lavira)
-- API keys from `keys.env` (if present — see below)
-- Auto-start on login
-
-**4. Done**
-
-Your browser opens to **http://localhost:4005** when the engine is ready.
+**Containerization:** each server builds from a distroless base image to minimize its runtime attack surface. Most module-level smoke tests pass against the containerized builds; the `media` server's containerized path is the one piece still pending full verification, and wiring the containerized servers into Claude Desktop's MCP config (in place of the old locally-spawned processes) is the next milestone.
 
 ---
 
-### API Keys
+## Installation
 
-The public ZIP has no keys. You have two options:
+Full setup instructions — Windows one-click installer, Linux/macOS manual setup, Claude Desktop MCP wiring, environment variables, and troubleshooting — now live in dedicated docs rather than this README:
 
-**Option A — Zero-touch (recommended for managed installs)**  
-Place a `keys.env` file in the same folder as `Install-Lavira.bat` before running. The installer reads it silently and fills in all keys — no prompts.
-
-```ini
-ANTHROPIC_API_KEY=sk-ant-...
-PEXELS_API_KEY=...
-GIPHY_API_KEY=...
-TS_AUTH_KEY=...
-```
-
-**Option B — Interactive**  
-Run without `keys.env`. The installer opens Notepad once for your Anthropic key.  
-Get a free key at https://console.anthropic.com/settings/keys
-
----
-
-### After Install — Claude Desktop
-
-Open Claude Desktop and start a chat. Lavira tools are already connected via MCP.
-
-Test it: type **`list my recent jobs`** — Claude should respond with Lavira data.
-
-If tools don't appear, restart Claude Desktop once.
-
----
-
-### Daily Use
-
-| Task | How |
-|------|-----|
-| Open web studio | http://localhost:4005 |
-| Start engine after reboot | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
-| Stop engine | PowerShell: `docker compose down` |
-| View logs | PowerShell: `docker compose logs -f` |
-
----
-
-### Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| "Windows protected your PC" | Click **More info** → **Run anyway** |
-| UAC prompt doesn't appear | Right-click `Install-Lavira.bat` → **Run as administrator** |
-| Browser says "can't connect" | Wait 30 s, then refresh. First build takes ~10 min. |
-| Engine stopped after reboot | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
-| Claude Desktop shows no tools | Restart Claude Desktop |
-| Port 4005 already in use | PowerShell: `docker compose down` then `docker compose up -d` |
-| Install log | `%TEMP%\lavira-install.log` |
-
----
-
-## Linux / macOS Setup
-
-```bash
-git clone https://github.com/jaguar999paw-droid/lavira-media-engine.git
-cd lavira-media-engine
-cp .env.example .env && nano .env   # add your API keys
-bash start.sh
-# Web UI:  http://localhost:4005
-# MCP SSE: http://localhost:4006/sse
-```
-
----
-
-## MCP Integration
-
-Connect Claude Desktop manually if needed.
-
-Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/.config/Claude/claude_desktop_config.json` (Linux/macOS):
-
-```json
-{
-  "mcpServers": {
-    "lavira": {
-      "command": "node",
-      "args": ["C:\\Users\\<you>\\lavira-media-engine\\src\\mcp\\server.js"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop. The 77 Lavira tools will appear in every conversation.
-
----
-
-## Environment Variables
-
-| Variable | Required | Notes |
-|----------|----------|-------|
-| `ANTHROPIC_API_KEY` | Recommended | AI captions + scripts |
-| `PEXELS_API_KEY` | Recommended | Stock photos + videos (free tier) |
-| `GIPHY_API_KEY` | Optional | GIF search |
-| `INSTAGRAM_ACCESS_TOKEN` | Optional | Direct publishing |
-| `FACEBOOK_ACCESS_TOKEN` | Optional | Direct publishing |
-| `TIKTOK_ACCESS_TOKEN` | Optional | Direct publishing |
-| `PORT` | No (default: 4005) | Web UI port |
+- **[Latest Release](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest)** — packaged Windows installer (`lavira-media-engine-windows-setup.zip`)
+- **[docs/INSTALLATION.md](docs/INSTALLATION.md)** — full install guide for all platforms, environment variables reference, and troubleshooting table
 
 ---
 
