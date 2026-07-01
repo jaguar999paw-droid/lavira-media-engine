@@ -37,7 +37,6 @@ sleep 2
 
 echo "  [5/5] Verifying health..."
 WEB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${WEB_PORT}/api/health 2>/dev/null)
-MCP_HEALTH=$(curl -s http://localhost:${WEB_PORT}/api/health 2>/dev/null | grep -o '"status":"ok"' || echo "pending")
 
 if [ "$WEB_STATUS" = "200" ]; then
   WEB_ICON="✅"
@@ -55,9 +54,6 @@ echo "  ║  MCP stdio (for Claude Desktop): node src/mcp/server.js"
 echo "  ║                                                  ║"
 echo "  ║  tmux sessions: lavira  |  lavira-mcp            ║"
 echo "  ║  Attach: tmux attach -t lavira                   ║"
-echo "  ║                                                  ║"
-echo "  ║  Tailscale (if enabled):                         ║"
-echo "  ║  Web: https://dizaster-1.euplectes-tegus.ts.net  ║"
 echo "  ╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  📋 Claude Desktop MCP config (claude.mcp.json):"
@@ -65,16 +61,16 @@ echo '  {
     "mcpServers": {
       "lavira-media-engine": {
         "command": "node",
-        "args": ["/workspace/lavira-media-engine/src/mcp/server.js"]
+        "args": ["<path-to-lavira>/src/mcp/server.js"]
       }
     }
   }'
 echo ""
 echo "  🔑 Required .env keys (check with: get_api_status):"
-echo "     PORT=4005                    ← CRITICAL: fixes UI port mismatch"
-echo "     ANTHROPIC_API_KEY=...        ✅ set"
-echo "     GIPHY_API_KEY=...            ✅ set"
-echo "     PEXELS_API_KEY=...           ✅ set"
-echo "     INSTAGRAM_ACCESS_TOKEN=...   ❌ MISSING — add to enable publishing"
-echo "     INSTAGRAM_USER_ID=...        ❌ MISSING"
+echo "     PORT=4005"
+echo "     ANTHROPIC_API_KEY=..."
+echo "     GIPHY_API_KEY=..."
+echo "     PEXELS_API_KEY=..."
+echo "     INSTAGRAM_ACCESS_TOKEN=...   (required for publishing)"
+echo "     INSTAGRAM_USER_ID=..."
 echo ""

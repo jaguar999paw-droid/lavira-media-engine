@@ -1,129 +1,157 @@
-# 🦁 Lavira Media Engine
+# Lavira Media Engine
 
-> AI-powered social media content engine for **Lavira Safaris** — turns a
-> destination name into a branded, ready-to-post image, video, or story in
-> one call, controllable conversationally via MCP or through a web dashboard.
+> AI-powered safari content engine — branded posts, videos, and 77 Claude MCP tools.
 
-[![Node.js](https://img.shields.io/badge/Node.js-20+-green)](https://nodejs.org)
-[![Docker](https://img.shields.io/badge/Docker-required-blue)](https://docker.com)
-[![MCP](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
+[![Release](https://img.shields.io/github/v/release/jaguar999paw-droid/lavira-media-engine)](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 ---
 
 ## What it does
 
-Lavira Media Engine automates the full content pipeline for safari marketing:
-
-- **Sources media** — fetches stock photos/video from Pexels and GIFs from GIPHY, or accepts uploads
-- **Understands the image** — Claude Vision analyses scene mood, dominant palette, and safe text zones before anything is composited
-- **Routes creative decisions** — an intelligence router maps those vision signals to layout, hook tone, and CTA style, so every post fits its source media instead of using one fixed template
-- **Composites branded output** — logo, destination name, hook text, and contact info layered onto the image at Instagram/Facebook/TikTok resolution, across 10 card template families
-- **Writes the copy** — Claude generates captions, hooks, hashtags, and CTAs (with a template-based fallback that needs no API key)
-- **Processes audio/video** — normalises loudness, trims to platform-exact durations, exports per-platform variants
-- **Publishes for real** — Instagram, Facebook, TikTok (v2 Content Posting API), Twitter/X (OAuth1a), and WhatsApp all have live publishers, not stubs
-- **Keeps a rotation** — least-recently-used destination tracking so the same place doesn't get featured twice in a row
-- **Runs a daily scheduler** — auto-generates a promo at 06:00 EAT for review/approval
-- **Receives webhooks** — Meta/TikTok/WhatsApp delivery and engagement events land on `/api/webhooks`
+Lavira takes a destination name and produces a complete, branded social media post — stock photo or video, logo overlay, AI caption, hashtags — ready to publish to Instagram, Facebook, or TikTok. Everything is controllable via 77 MCP tools that plug directly into Claude Desktop.
 
 ---
 
-## Overview
+## Windows Setup
 
-Two things run side by side against the same content pipeline and the same
-SQLite job history:
+**Requirements:** Windows 10 or 11 (64-bit) · Internet connection · ~15 min on first run
 
-1. **An MCP server** — for AI agents (Claude Desktop, or any MCP-compatible client) to drive the pipeline conversationally
-2. **A web interface** — Express + a single-page dashboard for a human to do the same thing by clicking
+**1. Download the ZIP**
 
-Both talk to the same underlying engines, so a post started by Claude and one started from the browser behave identically and show up in the same job history.
-
----
-
-## AI architecture (MCP server)
-
-`src/mcp/server.js` exposes **78 tools** covering intake, generation,
-publishing, scheduling, and diagnostics — grouped roughly as:
-
-| Group | Examples |
-|---|---|
-| Intake | `process_video`, `process_image`, `process_audio`, `search_giphy`, `use_giphy` |
-| Generation | `generate_branded_media`, `generate_all_cards`, `generate_card_template`, `create_post_workflow`, `smart_generate` |
-| Intelligence | `analyze_content_theme`, `generate_overlay_plan`, `fetch_optimal_media` |
-| Publishing | `post_to_instagram`, `post_to_facebook`, `post_to_tiktok`, `post_to_twitter`, `publish_job` (all support `dry_run`) |
-| Scheduling | `get_daily_schedule`, `trigger_daily_promo`, `get_destinations_to_feature`, `get_destination_rotation_status` |
-| Ops/diagnostics | `get_engine_health`, `get_api_status`, `cache_stats`, `list_output_files`, `list_posts` |
-
-Underneath, tool calls delegate to a set of focused engine modules
-(`src/engines/`) rather than the tool layer doing the work itself:
-
-- **`intelligence-router.js`** + **`image-vision.js`** — the decision layer; every generation call passes through vision analysis first
-- **`promo.js`** / **`compositor.js`** / **`card-templates.js`** — the actual image compositing (Sharp-based, 10 SVG template families)
-- **`external-media.js`** / **`giphy.js`** — stock media sourcing
-- **`audio.js`** / **`video.js`** / **`video-enhanced.js`** — FFmpeg-backed processing
-- **`ai-captions.js`** — Claude-generated copy, with a non-AI fallback in `captions.js`
-
-Job state, destination rotation, and content-duplicate checks are backed by
-SQLite (`src/orchestrator/memory.js`), so the engine knows what it posted
-recently regardless of whether the call came from Claude or the browser.
-
-**Note on the `src/mcp/servers/` folder:** it holds a set of per-domain server
-files (ops, brand, media, design, publish, search) from an earlier federated-
-architecture design. At runtime today, only the monolithic `src/mcp/server.js`
-process is actually started — those files aren't required by it. Worth
-knowing if you're navigating the source tree.
-
----
-
-## Web interface
-
-`src/server.js` (Express) serves both a dashboard and a REST API from one process:
-
-- **Dashboard** — `public/index.html`, a single-page UI for browsing destinations, triggering generation, reviewing the daily schedule, and publishing jobs without touching an AI client
-- **REST API** — `/api/intake/*` (upload, GIPHY, auto-generate), `/api/job/*` (status, bundle, publish), `/api/schedule/*` (today's promo, approve), `/api/publishing/status`, `/api/bookings`, `/api/webhooks`, `/api/admin/settings`, `/api/cache/*`
-- **Static output serving** — generated media is served directly from `/outputs`, `/outputs/mcp`, `/outputs/ui`, and `/posts`
-
-The web interface and the MCP server are two entry points into the same
-engine layer — there's no functionality exclusive to one or the other.
-
----
-
-## Tech stack
-
-Node.js · Express · Sharp (image compositing) · FFmpeg (audio/video) ·
-better-sqlite3 (job history) · Claude (vision + captions) · Pexels & GIPHY
-(media sourcing) · Docker (deployment) · Electron (desktop packaging)
-
----
-
-## Project layout
-
+Go to the [**latest release**](https://github.com/jaguar999paw-droid/lavira-media-engine/releases/latest) and download:
 ```
-lavira-media-engine/
-├── src/
-│   ├── server.js          # Web dashboard + REST API
-│   ├── mcp/server.js      # MCP server — 78 tools
-│   ├── engines/           # Compositing, vision, audio/video, media sourcing
-│   ├── orchestrator/      # Brand config, job memory, settings
-│   ├── content/           # Caption generation (AI + template fallback)
-│   ├── publishing/        # Instagram, Facebook, TikTok, Twitter, WhatsApp
-│   ├── routes/            # Intake, output, bookings, webhooks
-│   └── scheduler/         # Daily auto-promo
-├── public/                 # Web dashboard (single-page)
-├── docs/                   # Project documentation
-├── scripts/                 # Maintenance scripts
-└── electron/                # Desktop app packaging
+lavira-media-engine-windows-setup.zip
 ```
 
+**2. Extract it**
+
+Right-click the ZIP → **Extract All** → choose any folder (e.g. your Desktop).
+
+**3. Run the installer**
+
+Double-click **`Install-Lavira.bat`** inside the extracted folder.  
+Click **Yes** when Windows asks for permission.
+
+The installer handles everything automatically:
+- Docker Desktop
+- Claude Desktop (pre-wired to Lavira)
+- API keys from `keys.env` (if present — see below)
+- Auto-start on login
+
+**4. Done**
+
+Your browser opens to **http://localhost:4005** when the engine is ready.
+
 ---
 
-## Documentation
+### API Keys
 
-See [`CHANGELOG.md`](CHANGELOG.md) for release history and
-[`docs/`](docs/) for architecture notes and workflow write-ups.
+The public ZIP has no keys. You have two options:
+
+**Option A — Zero-touch (recommended for managed installs)**  
+Place a `keys.env` file in the same folder as `Install-Lavira.bat` before running. The installer reads it silently and fills in all keys — no prompts.
+
+```ini
+ANTHROPIC_API_KEY=sk-ant-...
+PEXELS_API_KEY=...
+GIPHY_API_KEY=...
+TS_AUTH_KEY=...
+```
+
+**Option B — Interactive**  
+Run without `keys.env`. The installer opens Notepad once for your Anthropic key.  
+Get a free key at https://console.anthropic.com/settings/keys
 
 ---
 
-## License
+### After Install — Claude Desktop
 
-MIT — see [LICENSE](LICENSE).
+Open Claude Desktop and start a chat. Lavira tools are already connected via MCP.
+
+Test it: type **`list my recent jobs`** — Claude should respond with Lavira data.
+
+If tools don't appear, restart Claude Desktop once.
+
+---
+
+### Daily Use
+
+| Task | How |
+|------|-----|
+| Open web studio | http://localhost:4005 |
+| Start engine after reboot | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
+| Stop engine | PowerShell: `docker compose down` |
+| View logs | PowerShell: `docker compose logs -f` |
+
+---
+
+### Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| "Windows protected your PC" | Click **More info** → **Run anyway** |
+| UAC prompt doesn't appear | Right-click `Install-Lavira.bat` → **Run as administrator** |
+| Browser says "can't connect" | Wait 30 s, then refresh. First build takes ~10 min. |
+| Engine stopped after reboot | Double-click `start.bat` in `C:\Users\<you>\lavira-media-engine` |
+| Claude Desktop shows no tools | Restart Claude Desktop |
+| Port 4005 already in use | PowerShell: `docker compose down` then `docker compose up -d` |
+| Install log | `%TEMP%\lavira-install.log` |
+
+---
+
+## Linux / macOS Setup
+
+```bash
+git clone https://github.com/jaguar999paw-droid/lavira-media-engine.git
+cd lavira-media-engine
+cp .env.example .env && nano .env   # add your API keys
+bash start.sh
+# Web UI:  http://localhost:4005
+# MCP SSE: http://localhost:4006/sse
+```
+
+---
+
+## MCP Integration
+
+Connect Claude Desktop manually if needed.
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/.config/Claude/claude_desktop_config.json` (Linux/macOS):
+
+```json
+{
+  "mcpServers": {
+    "lavira": {
+      "command": "node",
+      "args": ["C:\\Users\\<you>\\lavira-media-engine\\src\\mcp\\server.js"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The 77 Lavira tools will appear in every conversation.
+
+---
+
+## Environment Variables
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `ANTHROPIC_API_KEY` | Recommended | AI captions + scripts |
+| `PEXELS_API_KEY` | Recommended | Stock photos + videos (free tier) |
+| `GIPHY_API_KEY` | Optional | GIF search |
+| `INSTAGRAM_ACCESS_TOKEN` | Optional | Direct publishing |
+| `FACEBOOK_ACCESS_TOKEN` | Optional | Direct publishing |
+| `TIKTOK_ACCESS_TOKEN` | Optional | Direct publishing |
+| `PORT` | No (default: 4005) | Web UI port |
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+---
+
+*Built for [Lavira Safaris](https://lavirasafaris.com) · Node.js · Docker · FFmpeg · Sharp · Anthropic Claude · Pexels*
