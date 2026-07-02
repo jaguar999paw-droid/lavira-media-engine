@@ -1,7 +1,9 @@
 // engines/promo.js — Zero-media autonomous promo generator
 // Creates a full branded post without ANY user-uploaded media.
 // Pipeline: pick destination + theme → search Pexels stock → download →
-//           Sharp brand treatment → Claude caption → return complete post package.
+//           Signature Variance Engine (template/palette/logo/font) →
+//           branded render via dynamic-templates → Claude caption →
+//           return complete post package.
 'use strict';
 const https   = require('https');
 const http    = require('http');
@@ -16,9 +18,17 @@ const { resolvePostData } = require('./post-defaults');
 const mediaLib = require('./media-library');
 const { log } = require('../orchestrator/memory');
 
+// Signature Variance Engine (LATEST_CHANGES.md Implementation TODO #1).
+// Loaded defensively — if either module fails to load for any reason,
+// generateAutoPromo() falls back to the flat brandImage() watermark path
+// so a post is still produced.
+let variationEngine = null, dynTpl = null;
+try { variationEngine = require('./variation-engine'); } catch (e) { variationEngine = null; }
+try { dynTpl          = require('./dynamic-templates'); } catch (e) { dynTpl = null; }
+
 const OUTPUTS_DIR = cfg.OUTPUTS_DIR;
 
-// ── IMAGE PROFILES for zero-media posts ──────────────────────────────────────
+// ── IMAGE PROFILES for zero-media posts (legacy brandImage() fallback) ──────
 const POST_PROFILES = {
   instagram_post:   { w:1080, h:1080 },
   instagram_story:  { w:1080, h:1920 },
@@ -26,7 +36,7 @@ const POST_PROFILES = {
   twitter_card:     { w:1200, h:628  },
 };
 
-// ── PEXELS SEARCH ─────────────────────────────────────────────────────────────
+// ── PEXELS SEARCH ────────────────────────────────────────────────────────
 async function searchPexels(query, perPage = 5) {
   const key = process.env.PEXELS_API_KEY || cfg.PEXELS_KEY || '';
   if (!key) return { photos: [] };
@@ -43,7 +53,7 @@ async function searchPexels(query, perPage = 5) {
   });
 }
 
-// ── DOWNLOAD IMAGE ────────────────────────────────────────────────────────────
+// ── DOWNLOAD IMAGE ────────────────────────────────────────────────────────
 function downloadImage(url, destPath) {
   return new Promise((res, rej) => {
     const proto = url.startsWith('https') ? https : http;
@@ -59,7 +69,7 @@ function downloadImage(url, destPath) {
   });
 }
 
-// ── SVG FALLBACK GRAPHIC ──────────────────────────────────────────────────────
+// ── SVG FALLBACK GRAPHIC ────────────────────────────────────────────────
 // If no stock image found, generate a branded SVG-based graphic
 function generateFallbackSVG(destination, theme, width = 1080, height = 1080) {
   const colors = { bg: BRAND.colors.primary, accent: BRAND.colors.accent, text: '#FFFFFF' };
@@ -94,7 +104,7 @@ function generateFallbackSVG(destination, theme, width = 1080, height = 1080) {
   return Buffer.from(svg);
 }
 
-// ── APPLY BRAND TREATMENT ─────────────────────────────────────────────────────
+// ── APPLY BRAND TREATMENT (legacy flat watermark — fallback only) ────────
 async function brandImage(inputPath, profile = 'instagram_post', destination = '') {
   const spec    = POST_PROFILES[profile] || POST_PROFILES.instagram_post;
   const outFile = path.join(OUTPUTS_DIR, `lavira_auto_${profile}_${uuid().slice(0,6)}.jpg`);
@@ -119,7 +129,29 @@ async function brandImage(inputPath, profile = 'instagram_post', destination = '
   return { file: outFile, filename: path.basename(outFile), profile, resolution: `${spec.w}x${spec.h}` };
 }
 
-// ── MAIN: ZERO-MEDIA PROMO ────────────────────────────────────────────────────
+// ── BRANDED RENDER via Signature Variance Engine (primary path) ──────────
+// Uses variation-engine.resolveVariation() + dynamic-templates.renderDynamicTemplate()
+// so every post gets a randomized-but-brand-safe template/palette/logo-corner/font,
+// full mandatory branding (logo + contact bar via dynamic-templates), instead of
+// the old fixed watermark bar. Falls back to brandImage() on any failure.
+async function brandImageVaried(inputPath, profile, destination, theme, postData, variation) {
+  if (!dynTpl || !variation) return brandImage(inputPath, profile, destination);
+  try {
+    const result = await dynTpl.renderDynamicTemplate(
+      variation.template,
+      { ...postData, destination, contentType: 'promo' },
+      inputPath,
+      profile,
+      variation
+    );
+    return { ...result, downloadUrl: result.downloadUrl || `/outputs/${result.filename}` };
+  } catch (e) {
+    // Never let a rendering-layer bug block a post — degrade to the flat watermark.
+    return brandImage(inputPath, profile, destination);
+  }
+}
+
+// ── MAIN: ZERO-MEDIA PROMO ────────────────────────────────────────────────
 async function generateAutoPromo({ destination, theme, context, profiles, recentCaptions } = {}) {
   const dest     = destination || BRAND.destinations[Math.floor(Math.random() * BRAND.destinations.length)];
   const thm      = theme || 'wildlife_spotlight';
@@ -127,11 +159,30 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
   const query    = queries[Math.floor(Math.random() * queries.length)];
   const outProfs = profiles || ['instagram_post', 'instagram_story', 'facebook'];
 
-  // 1. Fetch promo package (caption, hook, hashtags) in parallel with image search
-  const [promoResult, pexelsResult] = await Promise.all([
+  // 1. Fetch promo package (caption, hook, hashtags), resolved post data
+  //    (hook/cta/highlights from context-pools.js via post-defaults.js),
+  //    and stock image search — all in parallel.
+  const [promoResult, resolvedDefaults, pexelsResult] = await Promise.all([
     generatePromoPackage({ destination: dest, mediaType: 'auto', context: context || `${thm} post for ${dest}`, recentCaptions: (() => { try { return log.getRecent(5).map(r => r.caption).filter(Boolean); } catch(_) { return recentCaptions || []; } })() }),
+    (async () => { try { return await resolvePostData(dest, thm, {}, {}); } catch(_) { return {}; } })(),
     searchPexels(query, 5)
   ]);
+
+  // 1b. Resolve one variation object (template/layout/palette/logo-corner/
+  //     font-pairing) for this post, enforcing the no-repeat-last-5 rule.
+  //     Same variation is reused across all platform profiles so a single
+  //     post looks consistent across instagram_post/story/facebook.
+  let variation = null;
+  if (variationEngine) {
+    try {
+      variation = variationEngine.resolveVariation({
+        destination: dest,
+        theme: thm,
+        contentType: 'promo',
+        angle: promoResult?.angle || null,
+      });
+    } catch (e) { variation = null; }
+  }
 
   // 2. Pick best image
   const photo    = pexelsResult.photos?.[0];
@@ -167,12 +218,13 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
     await sharp(svg).jpeg({ quality: 90 }).toFile(tmpPath);
   }
 
-  // 3. Apply brand treatment for all profiles
+  // 3. Apply brand treatment for all profiles — routed through the
+  //    Signature Variance Engine when available, else the legacy watermark.
   const imageResults = [];
   for (const prof of outProfs) {
     try {
-      const branded = await brandImage(sourceImg, prof, dest);
-      imageResults.push({ ...branded, downloadUrl: `/outputs/${branded.filename}` });
+      const branded = await brandImageVaried(sourceImg, prof, dest, thm, resolvedDefaults, variation);
+      imageResults.push({ ...branded, downloadUrl: branded.downloadUrl || `/outputs/${branded.filename}` });
     } catch (e) {
       imageResults.push({ profile: prof, error: e.message });
     }
@@ -180,10 +232,6 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
 
   // 4. Cleanup temp file
   try { fs.unlinkSync(tmpPath); } catch {}
-
-  // Enrich return with smart defaults (hook, highlight, season, CTA)
-  let resolvedDefaults = {};
-  try { resolvedDefaults = await resolvePostData(dest, thm, {}, {}); } catch(_) {}
 
   return {
     destination:  dest,
@@ -197,6 +245,13 @@ async function generateAutoPromo({ destination, theme, context, profiles, recent
     promo:        promoResult,
     results:      imageResults,
     mediaType:    'auto',
+    // Reproducibility (LATEST_CHANGES.md Section 3): log the resolved
+    // variation so any post's look can be explained after the fact.
+    variation:    variation ? {
+      template: variation.template, layout: variation.layout,
+      palette: variation.palette?.name, logoCorner: variation.logoCorner,
+      fontPairing: variation.fontPairing?.name,
+    } : null,
     generatedAt:  new Date().toISOString()
   };
 }

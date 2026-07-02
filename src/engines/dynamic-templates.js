@@ -8,8 +8,9 @@ const { v4: uuid } = require('uuid');
 const cfg = require('../config');
 const BRAND = require('../orchestrator/brand');
 const { log } = require('../orchestrator/memory');
+const logoLoader = require('./logo-loader');
 
-// ── TEMPLATE REGISTRY ──────────────────────────────────────────────────────────
+// ── TEMPLATE REGISTRY ────────────────────────────────────────────────────
 const TEMPLATE_REGISTRY = {
   hero_destination: {
     contentTypes: ['promo', 'storytelling', 'informational'],
@@ -48,7 +49,26 @@ const TEMPLATE_REGISTRY = {
   }
 };
 
-// ── USAGE HISTORY TRACKING ────────────────────────────────────────────────────
+// ── PER-PLATFORM OUTPUT DIMENSIONS ──────────────────────────────────────
+// Implementation TODO #1 / Section F: each platform target gets its own
+// aspect ratio and layout pass — never one image naively squeezed into
+// several shapes. This is the actual render target, independent of
+// whatever size the source stock/user media happens to be.
+const PLATFORM_SPECS = {
+  instagram_post:   { w: 1080, h: 1080 },
+  instagram_story:  { w: 1080, h: 1920 },
+  facebook_feed:    { w: 1200, h: 630  },
+  facebook:         { w: 1200, h: 630  },
+  tiktok:           { w: 1080, h: 1920 },
+  whatsapp:         { w: 1080, h: 1920 },
+  twitter_card:     { w: 1200, h: 628  },
+};
+
+function resolvePlatformSpec(profile) {
+  return PLATFORM_SPECS[profile] || PLATFORM_SPECS.instagram_post;
+}
+
+// ── USAGE HISTORY TRACKING ──────────────────────────────────────────────
 let templateUsageHistory = new Map();
 
 function recordTemplateUsage(template, contentType, success = true) {
@@ -59,7 +79,7 @@ function recordTemplateUsage(template, contentType, success = true) {
   templateUsageHistory.set(key, current);
 }
 
-// ── MEDIA ANALYSIS FOR AUTO-LAYOUT ────────────────────────────────────────────
+// ── MEDIA ANALYSIS FOR AUTO-LAYOUT ──────────────────────────────────────
 async function analyzeMediaForLayout(mediaPath) {
   try {
     const metadata = await sharp(mediaPath).metadata();
@@ -88,7 +108,7 @@ async function analyzeMediaForLayout(mediaPath) {
   }
 }
 
-// ── INTELLIGENT TEMPLATE SELECTION ────────────────────────────────────────────
+// ── INTELLIGENT TEMPLATE SELECTION ──────────────────────────────────────
 function selectTemplate(contentType, mediaAnalysis = null, userIntent = '', recentTemplates = []) {
   let candidates = Object.entries(TEMPLATE_REGISTRY)
     .filter(([name, config]) => config.contentTypes.includes(contentType))
@@ -105,7 +125,8 @@ function selectTemplate(contentType, mediaAnalysis = null, userIntent = '', rece
 
   // Avoid recent repetition
   const recentNames = recentTemplates.slice(-3);
-  candidates = candidates.filter(c => !recentNames.includes(c.name));
+  let filtered = candidates.filter(c => !recentNames.includes(c.name));
+  if (filtered.length) candidates = filtered; // only apply if it doesn't wipe out every candidate
 
   // Score by usage history and priority
   candidates.forEach(candidate => {
@@ -120,11 +141,11 @@ function selectTemplate(contentType, mediaAnalysis = null, userIntent = '', rece
   return candidates[0]?.name || 'hero_destination';
 }
 
-// ── DYNAMIC TEXT POSITIONING ──────────────────────────────────────────────────
+// ── DYNAMIC TEXT POSITIONING ─────────────────────────────────────────────
 function calculateTextLayout(mediaAnalysis, textElements) {
   const { width, height, isDark, hasHighContrast } = mediaAnalysis;
 
-  // Safe zones (avoid edges and busy areas)
+  // Safe zones (avoid platform UI overlap: IG story top/bottom ~14%, feed margins)
   const safeZone = {
     top: height * 0.15,
     bottom: height * 0.85,
@@ -149,164 +170,275 @@ function calculateTextLayout(mediaAnalysis, textElements) {
   };
 }
 
-// ── DYNAMIC TEMPLATE RENDERING ────────────────────────────────────────────────
-async function renderDynamicTemplate(templateName, data, mediaPath = null, profile = 'instagram_post') {
+// ── LOGO CORNER → PIXEL POSITION ─────────────────────────────────────────
+// Computes a brand-safe top-left position for the logo raster given the
+// canvas size and a target logo width. Corners are chosen to never overlap
+// the contact bar (bottom strip) or the hook/title text band.
+function logoCornerPosition(corner, w, h, logoW, logoH) {
+  const margin = Math.round(w * 0.04);
+  switch (corner) {
+    case 'top_right':
+      return { left: w - logoW - margin, top: margin };
+    case 'bottom_left_above_bar':
+      // contact bar occupies the bottom ~10% — sit just above it
+      return { left: margin, top: Math.round(h * 0.90) - logoH - margin };
+    case 'top_left':
+    default:
+      return { left: margin, top: margin };
+  }
+}
+
+// ── DYNAMIC TEMPLATE RENDERING ───────────────────────────────────────────
+// `variation` (optional) is the object returned by variation-engine's
+// resolveVariation(): { palette, logoCorner, fontPairing, layout, ... }
+async function renderDynamicTemplate(templateName, data, mediaPath = null, profile = 'instagram_post', variation = null) {
   const template = TEMPLATE_REGISTRY[templateName];
   if (!template) throw new Error(`Unknown template: ${templateName}`);
 
-  // Analyze media if provided
-  const mediaAnalysis = mediaPath ? await analyzeMediaForLayout(mediaPath) : null;
+  const spec = resolvePlatformSpec(profile);
 
-  // Calculate dynamic layout
-  const layout = mediaAnalysis ? calculateTextLayout(mediaAnalysis, data) : null;
+  // Analyze source media for tone (dark/contrast) only — actual render
+  // dimensions always come from the platform spec, not the source file.
+  const sourceAnalysis = mediaPath ? await analyzeMediaForLayout(mediaPath) : null;
+  const mediaAnalysis = {
+    width: spec.w,
+    height: spec.h,
+    isDark: sourceAnalysis ? sourceAnalysis.isDark : true,
+    hasHighContrast: sourceAnalysis ? sourceAnalysis.hasHighContrast : false,
+  };
 
-  // Generate SVG with dynamic positioning
-  const svgContent = generateDynamicSVG(templateName, data, mediaAnalysis, layout, profile);
+  const layout = calculateTextLayout(mediaAnalysis, data);
 
+  const palette = (variation && variation.palette) || { bg:'#2D6A4F', accent:'#F4A261', text:'#F9F5F0', overlay:'rgba(27,40,48,0.62)', name:'ForestGold' };
+  const fontPairing = (variation && variation.fontPairing) || { display: 'Arial, sans-serif', body: 'Arial, sans-serif' };
+  const logoCorner = (variation && variation.logoCorner) || 'top_left';
+
+  const svgContent = generateDynamicSVG(templateName, data, mediaAnalysis, layout, profile, palette, fontPairing);
   const svgBuffer = Buffer.from(svgContent);
+
   const outName = `dynamic_${templateName}_${profile}_${uuid().slice(0,8)}.jpg`;
   const outPath = path.join(cfg.OUTPUTS_DIR, outName);
+
+  // Logo raster, sized relative to canvas width, composited at the chosen corner
+  const logoW = Math.round(spec.w * 0.16);
+  let logoPng = null, logoMeta = null;
+  try {
+    logoPng = await logoLoader.getLogoPNG(logoW);
+    logoMeta = await sharp(logoPng).metadata();
+  } catch (_) { /* logo unavailable — post still ships with brand name text from the SVG */ }
+
+  const compositeLayers = [{ input: svgBuffer, blend: 'over' }];
+  if (logoPng && logoMeta) {
+    const pos = logoCornerPosition(logoCorner, spec.w, spec.h, logoMeta.width, logoMeta.height);
+    compositeLayers.push({ input: logoPng, left: pos.left, top: pos.top, blend: 'over' });
+  }
 
   let pipeline;
   if (mediaPath && fs.existsSync(mediaPath)) {
     pipeline = sharp(mediaPath)
-      .resize(mediaAnalysis.width, mediaAnalysis.height, { fit: 'cover' })
-      .composite([{ input: svgBuffer, blend: 'over' }]);
+      .resize(spec.w, spec.h, { fit: 'cover', position: 'centre' })
+      .composite(compositeLayers);
   } else {
-    // SVG-only with gradient background
-    const baseBg = Buffer.from(generateBackgroundSVG(mediaAnalysis || { width: 1080, height: 1080 }, profile));
-    pipeline = sharp(baseBg)
-      .composite([{ input: svgBuffer, blend: 'over' }]);
+    const baseBg = Buffer.from(generateBackgroundSVG(mediaAnalysis, profile, palette));
+    pipeline = sharp(baseBg).composite(compositeLayers);
   }
 
   await pipeline.jpeg({ quality: 95 }).toFile(outPath);
 
-  // Record usage
   recordTemplateUsage(templateName, data.contentType || 'promo');
 
   return {
     file: outPath,
     filename: outName,
     template: templateName,
+    layout: (variation && variation.layout) || null,
+    palette: palette.name,
+    logoCorner,
     profile,
+    resolution: `${spec.w}x${spec.h}`,
     mediaAnalysis,
     downloadUrl: `/outputs/${outName}`
   };
 }
 
-// ── DYNAMIC SVG GENERATION ────────────────────────────────────────────────────
-function generateDynamicSVG(templateName, data, mediaAnalysis, layout, profile) {
+// ── DYNAMIC SVG GENERATION ────────────────────────────────────────────────
+function generateDynamicSVG(templateName, data, mediaAnalysis, layout, profile, palette, fontPairing) {
   const { width = 1080, height = 1080 } = mediaAnalysis || {};
   const { primaryText, secondaryText } = layout || {};
 
-  // Template-specific content generation
   switch (templateName) {
     case 'hero_destination':
-      return generateHeroDestinationSVG(data, width, height, primaryText, secondaryText);
-
+      return generateHeroDestinationSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
     case 'wildlife_spotlight':
-      return generateWildlifeSpotlightSVG(data, width, height, primaryText, secondaryText);
-
+      return generateWildlifeSpotlightSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
     case 'testimonial':
-      return generateTestimonialSVG(data, width, height, primaryText, secondaryText);
-
+      return generateTestimonialSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
+    case 'package_promo':
+      return generatePackagePromoSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
+    case 'activity_highlight':
+      return generateActivityHighlightSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
     default:
-      return generateHeroDestinationSVG(data, width, height, primaryText, secondaryText);
+      return generateHeroDestinationSVG(data, width, height, primaryText, secondaryText, palette, fontPairing);
   }
 }
 
-// Template-specific SVG generators would go here...
-function generateHeroDestinationSVG(data, w, h, primary, secondary) {
-  // Implementation similar to existing but with dynamic positioning
+// ── Shared contact bar (brand name + phone + website + CTA) ──────────────
+// Pulled from the live BRAND dictionary — never hard-coded per Section B.
+function contactBarSVG(w, h, palette) {
+  const phone = BRAND.phone || '';
+  const site  = (BRAND.website || '').replace('https://', '');
+  return `
+    <rect x="0" y="${h*0.90}" width="${w}" height="${h*0.10}" fill="rgba(10,22,18,0.92)"/>
+    <text x="${w*0.05}" y="${h*0.935}" font-family="Arial,sans-serif" font-weight="bold"
+          font-size="${Math.round(h*0.028)}" fill="${palette.accent}">${escapeXML(BRAND.name || 'Lavira Safaris')}</text>
+    <text x="${w*0.05}" y="${h*0.965}" font-family="Arial,sans-serif"
+          font-size="${Math.round(h*0.02)}" fill="${palette.text}" opacity="0.9">📞 ${escapeXML(phone)}  ·  🌐 ${escapeXML(site)}</text>`;
+}
+
+function ctaSVG(w, h, cta, palette, y) {
+  if (!cta) return '';
+  return `<text x="${w*0.5}" y="${y}" text-anchor="middle" font-family="Arial,sans-serif"
+        font-size="${Math.round(w*0.03)}" font-weight="bold" fill="${palette.accent}">${escapeXML(cta)}</text>`;
+}
+
+function generateHeroDestinationSVG(data, w, h, primary, secondary, palette, fontPairing) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <!-- Dynamic gradient overlay -->
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="rgba(10,22,18,0)"/>
-        <stop offset="60%" stop-color="rgba(10,22,18,0.6)"/>
+        <stop offset="60%" stop-color="${palette.overlay}"/>
         <stop offset="100%" stop-color="rgba(10,22,18,0.9)"/>
       </linearGradient>
     </defs>
     <rect width="${w}" height="${h}" fill="url(#bg)"/>
 
-    <!-- Dynamic text positioning -->
-    <text x="${primary?.x || w/2}" y="${primary?.y || h*0.7}" text-anchor="${primary?.anchor || 'middle'}"
-          font-family="Arial,sans-serif" font-size="${Math.round(w*0.06)}" font-weight="bold" fill="#F4A261">
-      ${escapeXML(data.title || data.destination || 'Lavira Safaris')}
+    <text x="${primary?.x || w/2}" y="${primary?.y || h*0.62}" text-anchor="${primary?.anchor || 'middle'}"
+          font-family="${fontPairing.display}" font-size="${Math.round(w*0.06)}" font-weight="bold" fill="${palette.accent}">
+      ${escapeXML(data.hook || data.title || data.destination || 'Lavira Safaris')}
     </text>
 
-    ${data.subtitle ? `<text x="${secondary?.x || w/2}" y="${secondary?.y || h*0.78}" text-anchor="${secondary?.anchor || 'middle'}"
-          font-family="Arial,sans-serif" font-size="${Math.round(w*0.035)}" fill="white">
-      ${escapeXML(data.subtitle)}
+    ${data.destination ? `<text x="${secondary?.x || w/2}" y="${secondary?.y || h*0.70}" text-anchor="${secondary?.anchor || 'middle'}"
+          font-family="${fontPairing.body}" font-size="${Math.round(w*0.035)}" fill="${palette.text}">
+      📍 ${escapeXML(data.destination)}${data.highlight ? ' — ' + escapeXML(data.highlight) : ''}
     </text>` : ''}
 
-    <!-- Contact bar -->
-    <rect x="0" y="${h*0.9}" width="${w}" height="${h*0.1}" fill="rgba(10,22,18,0.9)"/>
-    <text x="${w*0.05}" y="${h*0.945}" font-family="Arial,sans-serif" font-size="${Math.round(h*0.025)}" font-weight="bold" fill="#F4A261">
-      📞 ${BRAND.phone}</text>
-    <text x="${w*0.05}" y="${h*0.975}" font-family="Arial,sans-serif" font-size="${Math.round(h*0.02)}" fill="white">
-      🌐 ${BRAND.website.replace("https://","")}</text>
+    ${ctaSVG(w, h, data.cta, palette, h*0.86)}
+    ${contactBarSVG(w, h, palette)}
   </svg>`;
 }
 
-function generateWildlifeSpotlightSVG(data, w, h, primary, secondary) {
+function generateWildlifeSpotlightSVG(data, w, h, primary, secondary, palette, fontPairing) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="rgba(10,22,18,0)"/>
-        <stop offset="70%" stop-color="rgba(10,22,18,0.7)"/>
+        <stop offset="70%" stop-color="${palette.overlay}"/>
         <stop offset="100%" stop-color="rgba(10,22,18,0.95)"/>
       </linearGradient>
     </defs>
     <rect width="${w}" height="${h}" fill="url(#bg)"/>
 
-    <!-- Animal badge -->
-    <rect x="${w*0.05}" y="${h*0.65}" width="${w*0.5}" height="${h*0.08}" fill="#F4A261" rx="${w*0.02}"/>
-    <text x="${w*0.3}" y="${h*0.695}" text-anchor="middle" font-family="Arial,sans-serif"
-          font-size="${Math.round(w*0.06)}" font-weight="900" fill="#0A1612">
+    <rect x="${w*0.05}" y="${h*0.60}" width="${w*0.5}" height="${h*0.06}" fill="${palette.accent}" rx="${w*0.02}"/>
+    <text x="${w*0.3}" y="${h*0.638}" text-anchor="middle" font-family="${fontPairing.display}"
+          font-size="${Math.round(w*0.05)}" font-weight="900" fill="#0A1612">
       ${escapeXML(data.animal || 'Wildlife')}
     </text>
 
-    <!-- Dynamic fact positioning -->
-    <text x="${w*0.05}" y="${h*0.78}" font-family="Arial,sans-serif"
-          font-size="${Math.round(w*0.032)}" fill="white" opacity="0.9">
-      ${escapeXML(data.fact || 'Amazing wildlife awaits')}
+    <text x="${w*0.05}" y="${h*0.72}" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.032)}" fill="${palette.text}" opacity="0.9">
+      ${escapeXML((data.hook || data.fact || 'Amazing wildlife awaits').slice(0, 80))}
     </text>
 
-    <text x="${w*0.05}" y="${h*0.82}" font-family="Arial,sans-serif"
-          font-size="${Math.round(w*0.025)}" fill="#9fd3aa">
+    <text x="${w*0.05}" y="${h*0.76}" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.025)}" fill="${palette.accent}">
       📍 ${escapeXML(data.destination || 'Kenya')}
     </text>
+
+    ${ctaSVG(w, h, data.cta, palette, h*0.86)}
+    ${contactBarSVG(w, h, palette)}
   </svg>`;
 }
 
-function generateTestimonialSVG(data, w, h, primary, secondary) {
+function generateTestimonialSVG(data, w, h, primary, secondary, palette, fontPairing) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <rect width="${w}" height="${h}" fill="rgba(10,22,18,0.8)"/>
+    <rect width="${w}" height="${h}" fill="${palette.overlay}"/>
 
-    <!-- Quote marks -->
-    <text x="${w*0.1}" y="${h*0.25}" font-family="Arial,sans-serif" font-size="${w*0.08}" fill="#F4A261" opacity="0.5">"</text>
+    <text x="${w*0.1}" y="${h*0.25}" font-family="${fontPairing.display}" font-size="${w*0.08}" fill="${palette.accent}" opacity="0.5">"</text>
 
-    <!-- Quote text -->
-    <text x="${w*0.5}" y="${h*0.35}" text-anchor="middle" font-family="Arial,sans-serif"
-          font-size="${Math.round(w*0.04)}" fill="white" font-style="italic">
-      ${escapeXML(data.quote || 'Amazing experience!')}
+    <text x="${w*0.5}" y="${h*0.35}" text-anchor="middle" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.04)}" fill="${palette.text}" font-style="italic">
+      ${escapeXML((data.quote || 'Amazing experience!').slice(0, 110))}
     </text>
 
-    <!-- Guest name -->
-    <text x="${w*0.5}" y="${h*0.75}" text-anchor="middle" font-family="Arial,sans-serif"
-          font-size="${Math.round(w*0.035)}" font-weight="bold" fill="#F4A261">
-      — ${escapeXML(data.guestName || 'Happy Traveler')}
+    <text x="${w*0.5}" y="${h*0.60}" text-anchor="middle" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.035)}" font-weight="bold" fill="${palette.accent}">
+      — ${escapeXML(data.guestName || data.guest || 'Happy Traveler')}
     </text>
+
+    ${ctaSVG(w, h, data.cta, palette, h*0.86)}
+    ${contactBarSVG(w, h, palette)}
   </svg>`;
 }
 
-function generateBackgroundSVG(mediaAnalysis, profile) {
+function generatePackagePromoSVG(data, w, h, primary, secondary, palette, fontPairing) {
+  const highlights = (data.highlights || []).slice(0, 4);
+  const highlightLines = highlights.map((hl, i) =>
+    `<text x="${w*0.08}" y="${h*0.50 + i * h*0.045}" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.03)}" fill="${palette.text}">✓ ${escapeXML(String(hl))}</text>`
+  ).join('\n');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <rect width="${w}" height="${h}" fill="${palette.overlay}"/>
+
+    <text x="${w*0.5}" y="${h*0.30}" text-anchor="middle" font-family="${fontPairing.display}"
+          font-size="${Math.round(w*0.055)}" font-weight="bold" fill="${palette.accent}">
+      ${escapeXML(data.packageName || (data.destination ? data.destination + ' Safari' : 'Safari Package'))}
+    </text>
+    ${data.duration ? `<text x="${w*0.5}" y="${h*0.37}" text-anchor="middle" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.03)}" fill="${palette.text}">${escapeXML(data.duration)}</text>` : ''}
+
+    ${highlightLines}
+
+    ${ctaSVG(w, h, data.cta, palette, h*0.82)}
+    ${contactBarSVG(w, h, palette)}
+  </svg>`;
+}
+
+function generateActivityHighlightSVG(data, w, h, primary, secondary, palette, fontPairing) {
+  const activity = data.activity || (data.activities && data.activities[0]) || 'Safari Adventure';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(10,22,18,0)"/>
+        <stop offset="65%" stop-color="${palette.overlay}"/>
+        <stop offset="100%" stop-color="rgba(10,22,18,0.92)"/>
+      </linearGradient>
+    </defs>
+    <rect width="${w}" height="${h}" fill="url(#bg)"/>
+
+    <text x="${primary?.x || w/2}" y="${primary?.y || h*0.66}" text-anchor="${primary?.anchor || 'middle'}"
+          font-family="${fontPairing.display}" font-size="${Math.round(w*0.052)}" font-weight="bold" fill="${palette.accent}">
+      ${escapeXML(activity)}
+    </text>
+
+    ${data.hook ? `<text x="${w*0.5}" y="${h*0.73}" text-anchor="middle" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.03)}" fill="${palette.text}">${escapeXML(data.hook)}</text>` : ''}
+
+    ${data.destination ? `<text x="${w*0.5}" y="${h*0.78}" text-anchor="middle" font-family="${fontPairing.body}"
+          font-size="${Math.round(w*0.026)}" fill="${palette.accent}">📍 ${escapeXML(data.destination)}</text>` : ''}
+
+    ${ctaSVG(w, h, data.cta, palette, h*0.86)}
+    ${contactBarSVG(w, h, palette)}
+  </svg>`;
+}
+
+function generateBackgroundSVG(mediaAnalysis, profile, palette) {
   const { width = 1080, height = 1080 } = mediaAnalysis;
+  const p = palette || { bg: '#2D6A4F', accent: '#1B4332' };
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#2D6A4F"/>
+        <stop offset="0%" stop-color="${p.bg}"/>
         <stop offset="100%" stop-color="#1B4332"/>
       </linearGradient>
     </defs>
@@ -323,5 +455,6 @@ module.exports = {
   renderDynamicTemplate,
   analyzeMediaForLayout,
   TEMPLATE_REGISTRY,
+  PLATFORM_SPECS,
   recordTemplateUsage
 };

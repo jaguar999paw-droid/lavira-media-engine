@@ -1,6 +1,8 @@
 # Lavira Post Quality Overhaul — Ruleset + Signature Variance Engine
 
-Status: **planning / spec document**. No rendering code has been changed yet — this file defines the rules the MCP agent (Claude) must follow when generating Lavira posts, and the randomization mechanism to implement so no two posts look alike. See "Implementation TODOs" for what's still code-side work.
+Status: **implemented (2026-07-02)**. Items 1–3 and 5 of the Implementation TODOs below are done and verified end-to-end: `create_post_workflow`/`smart_generate` now render through `variation-engine.js` + `dynamic-templates.js` instead of the old flat watermark. Item 6 was audited and confirmed already correct. Item 4 (font pairings) is done as part of item 2. See `NEXT_AGENT_HANDOFF.md` for the session log, including a font-family XML bug that was caught and fixed during wiring.
+
+*(Original spec text below is kept as-is for the design rationale; treat the "Implementation TODOs" section as a changelog, not a live TODO list.)*
 
 ---
 
