@@ -10,7 +10,7 @@ A Node.js MCP server (`v1.6.0`) that turns a destination name or a raw prompt in
 Core loop: `Prompt → Claude → MCP tool calls → Pexels/GIPHY/FFmpeg/Sharp/Claude → branded output file → outputs/ (or posts/ + publish)`
 
 ---
-
+## 1.1 THIS WAS A PROMPT WHOSE ATTENTION WAS CUT MID_TASK>>"Handle the most appropriate long-term fix for the issues you encountered while using the tools and document first inside a section in CONTEXT.md[the only AI-reasoning and memory documentation doc] for lavira activities. TEst more tools and toolsets + rate the effectiveness of  their functionality and when a tool call goes wrong. update this to claude memory > "notify me before choosing caveats to get the job done[]epecially when the nature of the promp/intent is to test." Use lavira media engine MCP servers and specify for me how to be specifying to you the choice of  MCP servers to use while working on lavira projects."
 ## 2. ⚠️ Verified current state vs. what the docs claim (read this first)
 
 Several docs (`NEXT_AGENT_HANDOFF.md`, `INFRA-SHIFT.md`, `README.md`) describe a "federated 6-server MCP cluster" as live and registered. A live check today shows a different reality:
