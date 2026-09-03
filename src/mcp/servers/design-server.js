@@ -56,46 +56,157 @@ const TOOLS = [
     inputSchema:{type:'object',properties:{destination:{type:'string'}},required:['destination']}}
 ];
 
+// NOTE (2026-08-03 fix): this file's handlers previously called method names
+// (applyOverlay / generateBrandedMedia / makeReadyToPost / buildPostPackage /
+// generateOverlayPlan / analyzeTheme / generateCard / generateAllCards /
+// processSampleAsTest / batchProcessSamples) that never existed on ANY of the
+// required engines — comp/intlRouter/imgVision/mediaAug/cardTpl/dynTpl all
+// loaded fine, just under different real export names (compositeImage,
+// routeIntelligence, analyseImage, analyzeContentForTheme, renderCard, ...).
+// Every pipeline tool here silently fell through to a stub or threw. Fixed by
+// wiring the handlers to the engines' actual exports (ported from the working
+// monolith implementation in src/mcp/server.js). See CONTEXT.md §4/§6.
 const HANDLERS = {
   async analyze_content_theme(args) {
-    if (imgVision?.analyzeContentTheme) return imgVision.analyzeContentTheme(args);
-    if (intlRouter?.analyzeTheme) return intlRouter.analyzeTheme(args);
+    if (mediaAug?.analyzeContentForTheme) {
+      const theme = mediaAug.analyzeContentForTheme(args);
+      return { theme, suggestions: mediaAug.CREATIVE_THEMES };
+    }
+    if (imgVision?.analyseImage && args.filePath) return imgVision.analyseImage(args.filePath);
     return { theme: 'destination_profile', note: 'Vision engine not connected — using default theme.' };
   },
+
   async generate_overlay_plan(args) {
-    if (intlRouter?.generateOverlayPlan) return intlRouter.generateOverlayPlan(args);
-    if (comp?.generateOverlayPlan) return comp.generateOverlayPlan(args);
+    if (mediaAug?.detectSubjectArea && args.filePath) {
+      const subjectArea = await mediaAug.detectSubjectArea(args.filePath);
+      return {
+        contentType: args.theme || 'destination_profile',
+        destination: args.destination,
+        subjectArea,
+        safeZones: [
+          { name: 'top_center',    x: 0.5,  y: 0.2, anchor: 'middle' },
+          { name: 'bottom_center', x: 0.5,  y: 0.8, anchor: 'middle' },
+          { name: 'left_center',   x: 0.15, y: 0.5, anchor: 'start'  },
+          { name: 'right_center',  x: 0.85, y: 0.5, anchor: 'end'    }
+        ]
+      };
+    }
+    if (intlRouter?.routeIntelligence) return intlRouter.routeIntelligence(args);
     return { plan: { position: 'bottom', brandBar: 'bottom', safeZone: '15%' }, note: 'Default plan — intelligence router not connected.' };
   },
+
   async generate_branded_media(args) {
-    if (mediaAug?.generateBrandedMedia) return mediaAug.generateBrandedMedia(args);
-    if (comp?.generateBrandedMedia) return comp.generateBrandedMedia(args);
-    // Fallback to overlay
+    const fs = require('fs');
+    const path = require('path');
+    if (!args.filePath || !fs.existsSync(args.filePath)) throw new Error('File not found: ' + args.filePath);
+    if (mediaAug?.analyzeContentForTheme) {
+      const theme = mediaAug.analyzeContentForTheme({ destination: args.destination, mood: args.theme, context: args.caption });
+      const marketing = mediaAug.generateMarketingPayload(theme, args.destination, args.caption);
+      const ext = path.extname(args.filePath).toLowerCase();
+      let enhancedBuffer;
+      if (['.mp4', '.mov', '.avi'].includes(ext)) {
+        const result = await mediaAug.enhanceVideo(args.filePath, {});
+        enhancedBuffer = fs.readFileSync(result.file);
+        try { fs.unlinkSync(result.file); } catch {}
+      } else {
+        enhancedBuffer = await mediaAug.renderDynamicText(args.filePath, {
+          primary: marketing.tagline, secondary: args.caption, theme
+        });
+      }
+      const outDir = cfg.OUTPUTS_DIR;
+      fs.mkdirSync(outDir, { recursive: true });
+      const finalPath = path.join(outDir, `branded_${theme}_${Date.now()}${ext}`);
+      fs.writeFileSync(finalPath, enhancedBuffer);
+      return { file: finalPath, filename: path.basename(finalPath), theme, marketing, downloadUrl: `/outputs/${path.basename(finalPath)}` };
+    }
     return HANDLERS.apply_overlay(args);
   },
+
   async apply_overlay(args) {
-    if (comp?.applyOverlay) return comp.applyOverlay(args);
+    const fs = require('fs');
+    const path = require('path');
+    if (!args.filePath || !fs.existsSync(args.filePath)) throw new Error('File not found: ' + args.filePath);
+    if (comp?.compositeImage) {
+      const opts = { destination: args.destination || '', hook: args.hook || '', promoType: args.promoType || '', layout: args.layout || 'standard' };
+      const ext = path.extname(args.filePath).toLowerCase();
+      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts);
+      if (ext === '.mp4') return await comp.compositeVideo(args.filePath, opts);
+      throw new Error('Unsupported file type: ' + ext);
+    }
     throw new Error('Compositor engine not available');
   },
+
   async make_ready_to_post(args) {
-    if (comp?.makeReadyToPost) return comp.makeReadyToPost(args);
-    if (mediaAug?.makeReadyToPost) return mediaAug.makeReadyToPost(args);
+    const fs = require('fs');
+    const path = require('path');
+    if (!args.filePath || !fs.existsSync(args.filePath)) throw new Error('File not found: ' + args.filePath);
+    if (comp?.compositeImage) {
+      let brand = {};
+      try { brand = require('../../orchestrator/brand'); } catch {}
+      const opts = {
+        promoType: args.promoType || '', destination: args.destination || '', hook: args.caption || '',
+        dateStr: new Date().toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' }),
+        layout: 'standard', email: brand.email, instagram: brand.socials?.instagram
+      };
+      const ext = path.extname(args.filePath).toLowerCase();
+      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts);
+      if (ext === '.mp4') return await comp.compositeVideo(args.filePath, opts);
+      throw new Error('Unsupported file type for overlay: ' + ext);
+    }
     throw new Error('Ready-to-post compositor not available');
   },
+
   async build_post_package(args) {
-    if (comp?.buildPostPackage) return comp.buildPostPackage(args);
-    throw new Error('Post package compositor not available');
+    const fs = require('fs');
+    const path = require('path');
+    if (!args.filePath || !fs.existsSync(args.filePath)) throw new Error('File not found: ' + args.filePath);
+    if (!comp?.compositeImage) throw new Error('Post package compositor not available');
+    const ext = path.extname(args.filePath).toLowerCase();
+    const isVideo = ext === '.mp4';
+    const profiles = (args.platforms && args.platforms.length) ? args.platforms : ['instagram_post', 'instagram_story', 'facebook'];
+    const opts = { destination: args.destination || '', hook: args.caption || '', layout: 'standard' };
+    const results = [];
+    for (const profile of profiles) {
+      try {
+        const r = isVideo ? await comp.compositeVideo(args.filePath, opts) : await comp.compositeImage(args.filePath, opts, profile);
+        results.push({ profile, ...r });
+      } catch (e) { results.push({ profile, error: e.message }); }
+    }
+    return { filePath: args.filePath, results, total: results.filter(r => !r.error).length, tip: 'postReady files are ready-to-post — download and share directly' };
   },
+
   async generate_card_template(args) {
-    if (cardTpl?.generateCard) return cardTpl.generateCard(args);
-    if (dynTpl?.generateCard) return dynTpl.generateCard(args);
+    const fs = require('fs');
+    if (cardTpl?.renderCard) {
+      const template = args.template || 'hero_destination';
+      const dest = args.destination || args.data?.destination || 'Masai Mara';
+      const defaultData = cardTpl.buildDefaultData(dest, template);
+      const data = { ...defaultData, ...(args.data || {}) };
+      const profile = args.profile || args.platform || 'instagram_post';
+      const bgImage = args.backgroundImage && fs.existsSync(args.backgroundImage) ? args.backgroundImage : null;
+      const result = await cardTpl.renderCard({ template, data, backgroundImage: bgImage, profile });
+      return { ...result, tip: `File available at outputs/${result.filename}` };
+    }
+    if (dynTpl?.renderDynamicTemplate) return dynTpl.renderDynamicTemplate(args);
     throw new Error('Card template engine not available');
   },
+
   async generate_all_cards(args) {
-    if (cardTpl?.generateAllCards) return cardTpl.generateAllCards(args);
-    if (dynTpl?.generateAllCards) return dynTpl.generateAllCards(args);
-    throw new Error('Card template engine not available');
+    if (!cardTpl?.renderCard) throw new Error('Card template engine not available');
+    const dest = args.destination || 'Masai Mara';
+    const profile = args.profile || args.platform || 'instagram_post';
+    const TEMPLATES = ['hero_destination', 'safari_package', 'testimonial', 'wildlife_spotlight', 'dual_destination', 'activity', 'story', 'stats', 'itinerary', 'offer'];
+    const results = [];
+    for (const t of TEMPLATES) {
+      try {
+        const data = { ...cardTpl.buildDefaultData(dest, t), ...(args.data || {}) };
+        const r = await cardTpl.renderCard({ template: t, data, backgroundImage: null, profile });
+        results.push({ ...r, template: t });
+      } catch (e) { results.push({ template: t, error: e.message }); }
+    }
+    return { destination: dest, profile, cards: results, total: results.filter(r => !r.error).length };
   },
+
   async save_to_posts({ filePath, platform }) {
     const fs = require('fs');
     const path = require('path');
@@ -124,13 +235,29 @@ const HANDLERS = {
     return { files };
   },
   async process_sample_as_test({ destination = 'Masai Mara', mediaType = 'image' }) {
-    if (comp?.processSampleAsTest) return comp.processSampleAsTest({ destination, mediaType });
-    return { note: `Test pipeline for ${destination} ${mediaType} — compositor not connected.` };
+    try {
+      const mediaLib = require('../../engines/media-library');
+      const sample = mediaLib.getRandomSample(destination, mediaType);
+      if (!sample) return { note: `No local samples found for ${destination} (${mediaType}) — try lavira-search:get_sample_media first.` };
+      return await HANDLERS.apply_overlay({ filePath: sample.localPath, destination });
+    } catch (e) {
+      return { note: `Test pipeline for ${destination} ${mediaType} failed: ${e.message}` };
+    }
   },
   async batch_process_samples({ destination }) {
-    if (comp?.batchProcessSamples) return comp.batchProcessSamples({ destination });
-    return { note: `Batch for ${destination} — compositor not connected.` };
+    try {
+      const mediaLib = require('../../engines/media-library');
+      const samples = mediaLib.getSamplesByDestination('image', destination).slice(0, 5);
+      const results = [];
+      for (const sample of samples) {
+        try { results.push(await HANDLERS.apply_overlay({ filePath: sample.localPath, destination })); }
+        catch (e) { results.push({ error: e.message, file: sample.localPath }); }
+      }
+      return { destination, processed: results.filter(r => !r.error).length, total: samples.length, results };
+    } catch (e) {
+      return { note: `Batch for ${destination} failed: ${e.message}` };
+    }
   }
 };
 
-rpc.start({ name: 'lavira-design', version: '4.0.0', tools: TOOLS, handlers: HANDLERS });
+rpc.start({ name: 'lavira-design', version: '4.0.1', tools: TOOLS, handlers: HANDLERS });

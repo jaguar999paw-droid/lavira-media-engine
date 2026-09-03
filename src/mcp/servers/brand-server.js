@@ -191,13 +191,31 @@ const HANDLERS = {
   },
 
   async get_destinations_to_feature() {
-    if (memoryEng?.getDestinationsToFeature) return memoryEng.getDestinationsToFeature();
-    const dests = ['Masai Mara','Amboseli','Samburu','Tsavo','Nakuru','Laikipia','Diani Beach'];
-    return { destinations: dests, note: 'Static list — memory engine not connected.' };
+    // memory.js exposes rotationStatus.get(allDests) — a DB-backed function, not a
+    // getDestinationsToFeature() method. Previously mismatched, so this always fell
+    // through to the static fallback below even with the memory engine fully connected.
+    // Fixed 2026-07-27 — see CONTEXT.md §9.
+    const allDests = BRAND?.destinations || ['Masai Mara','Amboseli','Samburu','Tsavo','Nakuru','Laikipia','Diani Beach'];
+    if (memoryEng?.rotationStatus?.get) {
+      try {
+        const ranked = memoryEng.rotationStatus.get(allDests);
+        return { destinations: ranked.map(r => r.destination), detail: ranked };
+      } catch (e) {
+        return { destinations: allDests, note: `Static list — rotation lookup failed: ${e.message}` };
+      }
+    }
+    return { destinations: allDests, note: 'Static list — memory engine not connected.' };
   },
 
   async get_destination_rotation_status() {
-    if (memoryEng?.getDestinationRotationStatus) return memoryEng.getDestinationRotationStatus();
+    const allDests = BRAND?.destinations || ['Masai Mara','Amboseli','Samburu','Tsavo','Nakuru','Laikipia','Diani Beach'];
+    if (memoryEng?.rotationStatus?.get) {
+      try {
+        return { rotation: memoryEng.rotationStatus.get(allDests) };
+      } catch (e) {
+        return { note: `Rotation status lookup failed: ${e.message}` };
+      }
+    }
     return { note: 'Rotation status not available — memory engine not connected.' };
   },
 
