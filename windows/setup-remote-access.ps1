@@ -478,13 +478,17 @@ if (-not $keySet -and -not $keysApplied) {
 }
 
 # ══ STEP 8: Claude Desktop MCP config ════════════════════════════════════════
-# FIX: Claude Desktop 0.7+ on Windows requires stdio transport for local MCP
-# servers. The previous SSE entry (http://localhost:4006/sse) appeared to work
-# but tools never loaded because Claude Desktop no longer polls SSE endpoints
-# automatically — it only discovers them if explicitly using SSE mode AND the
-# server is already running when Claude starts. The stdio transport is reliable,
-# starts the server on demand, and works even after reboots.
-Step "Connecting Claude Desktop to Lavira (stdio MCP)"
+# Registers the federated 6-server MCP cluster (lavira-ops/search/brand/media/
+# design/publish under src\mcp\servers\*.js) — this is the architecture that
+# is live and proven on the reference deployment (dizaster), NOT the older
+# single-file monolith (src\mcp\server.js), which is intentionally left
+# disabled. Each server is a standalone stdio process Claude Desktop spawns
+# on demand — no port required, starts fresh on every Claude Desktop launch,
+# survives reboots. (Historical note: an SSE entry at http://localhost:4006/sse
+# was tried first but Claude Desktop 0.7+ doesn't reliably poll SSE endpoints
+# unless the server is already running when Claude starts — stdio is what
+# actually works.)
+Step "Connecting Claude Desktop to Lavira (federated stdio MCP)"
 try {
     $cfgDir = Split-Path $CLAUDE_CONFIG
     New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
@@ -501,41 +505,59 @@ try {
         $nodePath = Find-FirstPath $nodeCandidates
     }
 
-    $laviraEntry = if ($nodePath -and (Test-Path (Join-Path $LAVIRA_DIR "src\mcp\server.js"))) {
-        # Preferred: stdio transport — starts server on demand, no port required
-        [PSCustomObject]@{
-            command = $nodePath
-            args    = @((Join-Path $LAVIRA_DIR "src\mcp\server.js"))
-            env     = [PSCustomObject]@{
-                LAVIRA_DIR = $LAVIRA_DIR
-                NODE_ENV   = "production"
+    # The 6 federated servers — name -> relative .js path under src\mcp\servers\
+    $federatedServers = [ordered]@{
+        "lavira-ops"     = "ops-server.js"
+        "lavira-search"  = "search-server.js"
+        "lavira-brand"   = "brand-server.js"
+        "lavira-media"   = "media-server.js"
+        "lavira-design"  = "design-server.js"
+        "lavira-publish" = "publish-server.js"
+    }
+    $serversDir = Join-Path $LAVIRA_DIR "src\mcp\servers"
+
+    if ($nodePath -and (Test-Path $serversDir)) {
+        $laviraEntries = [ordered]@{}
+        foreach ($name in $federatedServers.Keys) {
+            $serverFile = Join-Path $serversDir $federatedServers[$name]
+            if (Test-Path $serverFile) {
+                $laviraEntries[$name] = [PSCustomObject]@{
+                    command = $nodePath
+                    args    = @($serverFile)
+                    env     = [PSCustomObject]@{
+                        DOTENV_CONFIG_PATH = (Join-Path $LAVIRA_DIR ".env")
+                        NODE_ENV           = "production"
+                    }
+                }
+            } else {
+                Warn "Federated server file missing, skipped: $($federatedServers[$name])"
             }
         }
-    } else {
-        # Fallback: SSE (requires engine already running)
-        Warn "Node.exe not found — falling back to SSE MCP transport"
-        [PSCustomObject]@{ url = "http://localhost:4006/sse" }
-    }
 
-    if (Test-Path $CLAUDE_CONFIG) {
-        try {
-            $cfg = Get-Content $CLAUDE_CONFIG -Raw | ConvertFrom-Json
-            if (-not $cfg.PSObject.Properties["mcpServers"]) {
-                $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
+        if (Test-Path $CLAUDE_CONFIG) {
+            try {
+                $cfg = Get-Content $CLAUDE_CONFIG -Raw | ConvertFrom-Json
+                if (-not $cfg.PSObject.Properties["mcpServers"]) {
+                    $cfg | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([PSCustomObject]@{})
+                }
+                foreach ($name in $laviraEntries.Keys) {
+                    $cfg.mcpServers | Add-Member -NotePropertyName $name -NotePropertyValue $laviraEntries[$name] -Force
+                }
+                $json = $cfg | ConvertTo-Json -Depth 10
+                Write-TextFile $CLAUDE_CONFIG $json
+            } catch {
+                # Existing config unreadable — write fresh
+                $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]$laviraEntries }
+                Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 10)
             }
-            $cfg.mcpServers | Add-Member -NotePropertyName "lavira" -NotePropertyValue $laviraEntry -Force
-            $json = $cfg | ConvertTo-Json -Depth 10
-            Write-TextFile $CLAUDE_CONFIG $json
-        } catch {
-            # Existing config unreadable — write fresh
-            $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $laviraEntry } }
+        } else {
+            $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]$laviraEntries }
             Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 10)
         }
+        OK "Claude Desktop MCP config written — $($laviraEntries.Count) federated servers (stdio)"
     } else {
-        $fresh = [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ lavira = $laviraEntry } }
-        Write-TextFile $CLAUDE_CONFIG ($fresh | ConvertTo-Json -Depth 10)
+        Warn "Node.exe or src\mcp\servers not found — MCP registration skipped. Install Node.js, then re-run this script or edit $CLAUDE_CONFIG by hand (see SETUP.md)."
     }
-    OK "Claude Desktop MCP config written (stdio transport)"
 } catch { Warn "Claude Desktop config: $_" }
 
 # ══ STEP 9: Firewall ═══════════════════════════════════════════════════════════

@@ -55,3 +55,7 @@ src/publishing/*.bak*
 
 # ── Local convenience (host-specific symlinks, not portable) ──
 media-library/
+
+# ── Local-only context/handoff docs (never pushed) ──────────────────────────
+CONTEXT.md
+CONTEXT.md.bak*
