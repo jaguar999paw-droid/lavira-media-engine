@@ -70,20 +70,29 @@ const TOOLS = [
 ];
 
 // ── Handlers: delegate to engine modules ────────────────────────────────────
+// NOTE (fixed 2026-09-05): every handler below was previously calling either
+// a method name that does not exist on the engine module, or the right
+// method with the whole `args` object passed where the engine expects
+// positional parameters. Verified against actual engine exports/signatures
+// via `node -e "console.log(Object.keys(require(...)))"` and direct source
+// reads — see /areas/lavira-media-engine.md on dizaster for the audit notes.
 
 const HANDLERS = {
   async process_video(args) {
-    if (videoEng?.processVideo) return videoEng.processVideo(args);
-    if (videoEnh?.processVideo) return videoEnh.processVideo(args);
+    // No engine ever exported "processVideo". Real equivalent: video.js's
+    // processVariant(inputPath, platform, opts) — opts.duration/trimStart/quality.
+    if (videoEng?.processVariant) return videoEng.processVariant(args.filePath, args.platform, args);
+    if (videoEnh?.encodeForPlatform) return videoEnh.encodeForPlatform(args.filePath, args.platform, args);
     throw new Error('Video engine not available');
   },
   async video_clip(args) {
-    if (videoEng?.clipVideo) return videoEng.clipVideo(args);
-    if (videoEnh?.clipVideo) return videoEnh.clipVideo(args);
+    // clipVideo exists, but takes positional (inputPath, startSec, durationSec, outputPath) —
+    // was being called with the whole args object, which silently misbehaves rather than throwing.
+    if (videoEnh?.clipVideo) return videoEnh.clipVideo(args.filePath, args.startSec, args.durationSec, args.outputName);
     throw new Error('Video clip engine not available');
   },
   async video_probe(args) {
-    if (videoEng?.probeVideo) return videoEng.probeVideo(args);
+    if (videoEng?.probe) return videoEng.probe(args.filePath);
     // Fallback: ffprobe direct (execFileSync — no shell, no string interpolation of user input)
     const { execFileSync } = require('child_process');
     const ffprobe = require('ffprobe-static').path;
@@ -102,55 +111,67 @@ const HANDLERS = {
       codec: vs?.codec_name, fps, size: data.format?.size };
   },
   async video_encode_platform(args) {
-    if (videoEnh?.encodePlatform) return videoEnh.encodePlatform(args);
-    if (videoEng?.encodeVideo) return videoEng.encodeVideo(args);
+    // Real name is encodeForPlatform, not encodePlatform.
+    if (videoEnh?.encodeForPlatform) return videoEnh.encodeForPlatform(args.filePath, args.platform, args);
+    if (videoEng?.processVariant) return videoEng.processVariant(args.filePath, args.platform, args);
     throw new Error('Video encode engine not available');
   },
   async video_add_watermark(args) {
-    if (videoEnh?.addWatermark) return videoEnh.addWatermark(args);
-    if (videoEng?.addWatermark) return videoEng.addWatermark(args);
+    // Real name is addBrandWatermark, not addWatermark. Signature is
+    // (inputPath, opts, outputPath) — opts.destination is read internally.
+    if (videoEnh?.addBrandWatermark) return videoEnh.addBrandWatermark(args.filePath, args);
     throw new Error('Watermark engine not available');
   },
   async video_to_reel(args) {
-    if (videoEnh?.imageToReel) return videoEnh.imageToReel(args);
-    if (videoEng?.imageToReel) return videoEng.imageToReel(args);
+    // Real name is imageToVideo, not imageToReel. Signature is
+    // (imagePath, durationSec, platform, outputPath) — NOTE: the engine has
+    // no concept of "destination" or "zoomDirection" (always zooms in the
+    // same way); those two schema fields are accepted but currently have no
+    // effect until the engine itself grows that capability.
+    if (videoEnh?.imageToVideo) return videoEnh.imageToVideo(args.filePath, args.duration, 'tiktok');
     throw new Error('Reel engine not available');
   },
   async full_video_post_pipeline(args) {
-    if (videoEnh?.fullVideoPipeline) return videoEnh.fullVideoPipeline(args);
-    if (videoEng?.fullVideoPipeline) return videoEng.fullVideoPipeline(args);
+    // Real name is fullVideoPostPipeline, not fullVideoPipeline. Call shape
+    // was already correct (single opts object).
+    if (videoEnh?.fullVideoPostPipeline) return videoEnh.fullVideoPostPipeline(args);
     throw new Error('Full pipeline engine not available');
   },
   async process_image(args) {
-    if (imageEng?.processImage) return imageEng.processImage(args);
-    if (imageEnh?.processImage) return imageEnh.processImage(args);
+    // imageEnh has no processImage export at all (dead fallback removed).
+    // Real signature: image.js processImage(inputPath, profiles, opts).
+    if (imageEng?.processImage) return imageEng.processImage(args.filePath, args.profiles, args);
     throw new Error('Image engine not available');
   },
   async image_smart_crop(args) {
-    if (imageEnh?.smartCrop) return imageEnh.smartCrop(args);
-    if (imageEng?.smartCrop) return imageEng.smartCrop(args);
+    // Right name, wrong shape: smartCrop(filePath, targetW, targetH, outputPath).
+    if (imageEnh?.smartCrop) return imageEnh.smartCrop(args.filePath, args.width, args.height, args.outputName);
     throw new Error('Smart crop engine not available');
   },
   async image_compare(args) {
-    if (imageEnh?.compareImages) return imageEnh.compareImages(args);
+    // Right name, wrong shape: compareImages(filePathA, filePathB, outputPath).
+    if (imageEnh?.compareImages) return imageEnh.compareImages(args.filePathA, args.filePathB);
     throw new Error('Image compare engine not available');
   },
   async image_export_platform(args) {
-    if (imageEnh?.exportPlatform) return imageEnh.exportPlatform(args);
-    if (imageEng?.exportPlatform) return imageEng.exportPlatform(args);
+    // Real name is exportForPlatform, not exportPlatform.
+    if (imageEnh?.exportForPlatform) return imageEnh.exportForPlatform(args.filePath, args.platform);
     throw new Error('Platform export engine not available');
   },
   async image_ocr_prepare(args) {
-    if (imageEnh?.ocrPrepare) return imageEnh.ocrPrepare(args);
+    // Real name is prepareForOCR, not ocrPrepare.
+    if (imageEnh?.prepareForOCR) return imageEnh.prepareForOCR(args.filePath);
     throw new Error('OCR prepare engine not available');
   },
   async image_analyze_colors(args) {
-    if (imageEnh?.analyzeColors) return imageEnh.analyzeColors(args);
-    if (imageEng?.analyzeColors) return imageEng.analyzeColors(args);
+    // Right name, wrong shape: analyzeColors(filePath) takes one positional arg.
+    if (imageEnh?.analyzeColors) return imageEnh.analyzeColors(args.filePath);
     throw new Error('Color analysis engine not available');
   },
   async image_metadata(args) {
-    if (imageEnh?.getMetadata) return imageEnh.getMetadata(args);
+    // imageEnh has no getMetadata export (real name is extractMetadata);
+    // the sharp-based fallback below was already correct and does the job.
+    if (imageEnh?.extractMetadata) return imageEnh.extractMetadata(args.filePath);
     const sharp = require('sharp');
     const meta = await sharp(args.filePath).metadata();
     const stat = require('fs').statSync(args.filePath);
@@ -158,14 +179,31 @@ const HANDLERS = {
       size: (stat.size / 1024 / 1024).toFixed(2) + ' MB', megapixels: ((meta.width * meta.height) / 1e6).toFixed(2) };
   },
   async image_build_collage(args) {
-    if (imageEnh?.buildCollage) return imageEnh.buildCollage(args);
+    // Right name, wrong shape: buildCollage(imagePaths, outputPath).
+    if (imageEnh?.buildCollage) return imageEnh.buildCollage(args.filePaths, args.outputName);
     throw new Error('Collage engine not available');
   },
   async process_audio(args) {
-    if (audioEng?.processAudio) return audioEng.processAudio(args);
+    // Right name, wrong shape AND a schema/engine model mismatch: the tool
+    // exposes `preset` as a duration number (15/30/45/60), but the engine
+    // wants `profiles` as an array of preset NAME strings. Map preset ->
+    // matching profile names via the engine's own PLATFORM_DURATIONS table.
+    if (audioEng?.processAudio) {
+      let profiles = ['instagram_story', 'tiktok_audio'];
+      if (args.preset && audioEng.PLATFORM_DURATIONS) {
+        const matches = Object.entries(audioEng.PLATFORM_DURATIONS)
+          .filter(([, durs]) => durs.includes(args.preset))
+          .map(([name]) => name);
+        if (matches.length) profiles = matches;
+      }
+      return audioEng.processAudio(args.filePath, profiles, args);
+    }
     throw new Error('Audio engine not available');
   },
   async mix_audio_with_media(args) {
+    // Already correct: mixAudioWithMedia({mediaPath, audioPath, durationSeconds})
+    // destructures an object, and args already carries matching keys.
+    // (schema's platform/volume fields are accepted but unused by the engine)
     if (mediaMixer?.mixAudioWithMedia) return mediaMixer.mixAudioWithMedia(args);
     throw new Error('Media mixer engine not available');
   }
