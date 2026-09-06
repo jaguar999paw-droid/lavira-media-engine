@@ -129,7 +129,7 @@ const HANDLERS = {
     if (comp?.compositeImage) {
       const opts = { destination: args.destination || '', hook: args.hook || '', promoType: args.promoType || '', layout: args.layout || 'standard' };
       const ext = path.extname(args.filePath).toLowerCase();
-      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts);
+      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts, args.platform || 'instagram_post');
       if (ext === '.mp4') return await comp.compositeVideo(args.filePath, opts);
       throw new Error('Unsupported file type: ' + ext);
     }
@@ -149,7 +149,7 @@ const HANDLERS = {
         layout: 'standard', email: brand.email, instagram: brand.socials?.instagram
       };
       const ext = path.extname(args.filePath).toLowerCase();
-      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts);
+      if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return await comp.compositeImage(args.filePath, opts, args.platform || 'instagram_post');
       if (ext === '.mp4') return await comp.compositeVideo(args.filePath, opts);
       throw new Error('Unsupported file type for overlay: ' + ext);
     }
